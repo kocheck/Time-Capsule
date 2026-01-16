@@ -26,22 +26,24 @@ struct TimeCapsuleApp: App {
             Logger().error("Failed to create ModelContainer: \(error.localizedDescription)")
             
             // Attempt recovery with in-memory storage as fallback
+            let fallbackConfig = ModelConfiguration(
+                schema: schema,
+                isStoredInMemoryOnly: true
+            )
+            
             do {
-                let fallbackConfig = ModelConfiguration(
-                    schema: schema,
-                    isStoredInMemoryOnly: true
-                )
                 Logger().warning("Using in-memory storage as fallback - data will not persist")
                 return try ModelContainer(for: schema, configurations: [fallbackConfig])
             } catch {
-                // If even in-memory fails, this is a critical system issue
+                // If even in-memory storage fails, this indicates a critical system issue
+                // (e.g., SwiftData framework corruption or severe memory constraints)
                 Logger().critical("Failed to create fallback ModelContainer: \(error.localizedDescription)")
-                // As a last resort, try with the most basic configuration
-                // swiftlint:disable:next force_try
-                return try! ModelContainer(
-                    for: schema,
-                    configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
-                )
+                preconditionFailure("""
+                    Critical error: Unable to initialize in-memory storage.
+                    This indicates a system-level issue with SwiftData.
+                    Please restart your Mac or reinstall the application.
+                    Error: \(error.localizedDescription)
+                    """)
             }
         }
     }()
