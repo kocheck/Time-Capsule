@@ -52,6 +52,16 @@ final class OllamaService: AIServiceProtocol {
         return parseContextHints(response)
     }
 
+    func generateWeeklyDigest(context: WeeklyContext) async throws -> WeeklyDigestResponse {
+        guard await isAvailable() else {
+            throw AIServiceError.notAvailable
+        }
+
+        let prompt = buildDigestPrompt(context: context)
+        let response = try await sendRequest(prompt: prompt)
+        return try parseDigestResponse(response)
+    }
+
     func isAvailable() async -> Bool {
         let url = endpoint.appendingPathComponent("api/tags")
 
@@ -121,5 +131,44 @@ final class OllamaService: AIServiceProtocol {
         content.split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
             .filter { !$0.isEmpty }
+    }
+
+    private func buildDigestPrompt(context: WeeklyContext) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d"
+        let weekRange = "\(formatter.string(from: context.weekStartDate)) - \(formatter.string(from: context.weekEndDate))"
+
+        let dailySummary = context.dailyStats.map { "\($0.dayName): \($0.completedCount)done/\($0.skippedCount)skip" }
+            .joined(separator: ", ")
+
+        let staleList = context.staleTasks.prefix(5).map { $0.title }.joined(separator: ", ")
+
+        return """
+        Generate a weekly productivity digest for \(weekRange).
+
+        Stats: \(context.totalCompleted) completed, \(context.totalSkipped) skipped, \(context.currentStreak)-day streak
+        Daily: \(dailySummary.isEmpty ? "No data" : dailySummary)
+        Stale tasks: \(staleList.isEmpty ? "None" : staleList)
+        Top tags: \(context.topTags.joined(separator: ", "))
+
+        Respond with JSON only:
+        {"summary": "<2 sentences>", "accomplishments": ["<item>"], "patterns": ["<item>"], "suggestions": ["<item>"]}
+        """
+    }
+
+    private func parseDigestResponse(_ content: String) throws -> WeeklyDigestResponse {
+        let cleaned = content.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard let jsonStart = cleaned.firstIndex(of: "{"),
+              let jsonEnd = cleaned.lastIndex(of: "}") else {
+            throw AIServiceError.parsingError("No JSON found in digest")
+        }
+
+        let jsonString = String(cleaned[jsonStart...jsonEnd])
+        guard let jsonData = jsonString.data(using: .utf8) else {
+            throw AIServiceError.parsingError("Invalid digest JSON")
+        }
+
+        return try JSONDecoder().decode(WeeklyDigestResponse.self, from: jsonData)
     }
 }

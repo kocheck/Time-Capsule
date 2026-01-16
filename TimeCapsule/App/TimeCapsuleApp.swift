@@ -13,7 +13,8 @@ struct TimeCapsuleApp: App {
         let schema = Schema([
             TaskItem.self,
             DailyStats.self,
-            AppSettings.self
+            AppSettings.self,
+            WeeklyDigest.self
         ])
 
         let modelConfiguration = ModelConfiguration(

@@ -23,6 +23,8 @@ struct MenuBarView: View {
                     TaskSuggestionView(modelContext: modelContext, aiService: aiService)
                 case .progress:
                     DailyProgressView(modelContext: modelContext)
+                case .digest:
+                    WeeklyDigestView(modelContext: modelContext, aiService: aiService)
                 case .settings:
                     SettingsView(modelContext: modelContext)
                 }

@@ -3,6 +3,7 @@ import Foundation
 protocol AIServiceProtocol: Sendable {
     func rankTasks(context: TaskContext) async throws -> TaskRanking
     func generateContextHints(for title: String, description: String?, tags: [String]) async throws -> [String]
+    func generateWeeklyDigest(context: WeeklyContext) async throws -> WeeklyDigestResponse
     func isAvailable() async -> Bool
 }
 
