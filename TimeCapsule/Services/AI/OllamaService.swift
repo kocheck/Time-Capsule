@@ -7,18 +7,14 @@ final class OllamaService: AIServiceProtocol {
 
     init(endpoint: String = "http://localhost:11434", model: String = "llama3.1") {
         // Safely unwrap URL, fallback to localhost if invalid
-        guard let url = URL(string: endpoint) else {
+        if let url = URL(string: endpoint) {
+            self.endpoint = url
+        } else {
+            // This should never fail since it's a constant valid URL
+            // swiftlint:disable:next force_unwrapping
             self.endpoint = URL(string: "http://localhost:11434")!
-            self.model = model
-            
-            let config = URLSessionConfiguration.default
-            config.timeoutIntervalForRequest = 30
-            config.timeoutIntervalForResource = 60
-            self.session = URLSession(configuration: config)
-            return
         }
         
-        self.endpoint = url
         self.model = model
 
         let config = URLSessionConfiguration.default
