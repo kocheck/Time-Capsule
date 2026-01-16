@@ -6,7 +6,19 @@ final class OllamaService: AIServiceProtocol {
     private let session: URLSession
 
     init(endpoint: String = "http://localhost:11434", model: String = "llama3.1") {
-        self.endpoint = URL(string: endpoint)!
+        // Safely unwrap URL, fallback to localhost if invalid
+        guard let url = URL(string: endpoint) else {
+            self.endpoint = URL(string: "http://localhost:11434")!
+            self.model = model
+            
+            let config = URLSessionConfiguration.default
+            config.timeoutIntervalForRequest = 30
+            config.timeoutIntervalForResource = 60
+            self.session = URLSession(configuration: config)
+            return
+        }
+        
+        self.endpoint = url
         self.model = model
 
         let config = URLSessionConfiguration.default
