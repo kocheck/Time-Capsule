@@ -1,0 +1,33 @@
+version: 2
+updates:
+  # Enable version updates for Swift Package Manager
+  - package-ecosystem: "swift"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "swift-package-manager"
+    reviewers:
+      - "timecapsule/core-team"
+    commit-message:
+      prefix: "deps"
+
+  # Enable version updates for GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "github-actions"
+    reviewers:
+      - "timecapsule/devops-team"
+    commit-message:
+      prefix: "ci"

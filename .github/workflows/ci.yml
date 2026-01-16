@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build and Test
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.0.app
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Cache Swift packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/org.swift.swiftpm
+            .build
+          key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      - name: Install SwiftLint
+        run: brew install swiftlint
+
+      - name: Lint (Standard)
+        run: |
+          chmod +x Scripts/*.sh
+          ./Scripts/lint.sh --reporter github-actions-logging
+
+      - name: Lint (Strict)
+        if: github.event_name == 'pull_request'
+        run: ./Scripts/lint.sh --strict --reporter github-actions-logging
+
+      - name: Security Audit
+        run: ./Scripts/lint-security.sh
+
+      - name: Upload Security Report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-audit-report
+          path: security-audit-report.md
+
+      - name: Build
+        run: |
+          xcodebuild build \
+            -project TimeCapsule.xcodeproj \
+            -scheme TimeCapsule \
+            -destination 'platform=macOS' \
+            -configuration Debug
+
+      - name: Test
+        run: |
+          xcodebuild test \
+            -project TimeCapsule.xcodeproj \
+            -scheme TimeCapsule \
+            -destination 'platform=macOS' \
+            -enableCodeCoverage YES
+
+      - name: Upload Coverage
+        uses: codecov/codecov-action@v3
+        with:
+          fail_ci_if_error: false

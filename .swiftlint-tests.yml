@@ -1,0 +1,43 @@
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║              TIME CAPSULE - TEST FILES CONFIGURATION                          ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+
+parent_config: .swiftlint.yml
+
+included:
+  - TimeCapsuleTests
+  - TimeCapsuleUITests
+
+# Relax some rules for tests
+disabled_rules:
+  - force_unwrapping
+  - force_try
+  - force_cast
+  - implicitly_unwrapped_optional
+  - file_length
+  - type_body_length
+  - function_body_length
+  - line_length
+
+# Test-specific rules
+opt_in_rules:
+  - quick_discouraged_focused_test
+  - quick_discouraged_pending_test
+  - single_test_class
+  - xct_specific_matcher
+  - test_case_accessibility
+
+custom_rules:
+  # Ensure tests have assertions
+  test_without_assertion:
+    name: "Test Without Assertion"
+    regex: "@Test.*func\\s+\\w+\\s*\\([^)]*\\)\\s*(?:async\\s*)?(?:throws\\s*)?\\{[^}]*\\}(?![^}]*#expect)"
+    message: "Tests should have at least one #expect assertion."
+    severity: warning
+
+  # Ensure async tests use await
+  async_test_without_await:
+    name: "Async Test Without Await"
+    regex: "@Test.*func\\s+\\w+\\s*\\([^)]*\\)\\s*async[^{]*\\{(?![^}]*await)"
+    message: "Async tests should await something."
+    severity: warning

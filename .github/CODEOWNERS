@@ -1,0 +1,26 @@
+# Code Owners for Time Capsule
+
+# Default owners for everything
+* @timecapsule/core-team
+
+# AI Services
+/TimeCapsule/Services/AI/ @timecapsule/ai-team
+
+# Views and UI
+/TimeCapsule/Views/ @timecapsule/ui-team
+
+# Models and Data
+/TimeCapsule/Models/ @timecapsule/data-team
+/TimeCapsule/Services/DataService.swift @timecapsule/data-team
+/TimeCapsule/Services/StatsService.swift @timecapsule/data-team
+
+# Tests
+/TimeCapsuleTests/ @timecapsule/qa-team
+/TimeCapsuleUITests/ @timecapsule/qa-team
+
+# CI/CD
+/.github/ @timecapsule/devops-team
+
+# Documentation
+/Documentation/ @timecapsule/docs-team
+/README.md @timecapsule/docs-team

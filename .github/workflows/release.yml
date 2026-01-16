@@ -1,0 +1,46 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-release:
+    name: Build Release
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.0.app
+
+      - name: Build Archive
+        run: |
+          xcodebuild archive \
+            -project TimeCapsule.xcodeproj \
+            -scheme TimeCapsule \
+            -configuration Release \
+            -archivePath ./build/TimeCapsule.xcarchive
+
+      - name: Export Archive
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath ./build/TimeCapsule.xcarchive \
+            -exportPath ./build/Release
+
+      - name: Create DMG
+        run: |
+          hdiutil create -volname "Time Capsule" \
+            -srcfolder ./build/Release \
+            -ov -format UDZO \
+            ./build/TimeCapsule.dmg
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ./build/TimeCapsule.dmg
+          draft: true
+          generate_release_notes: true
