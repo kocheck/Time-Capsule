@@ -84,8 +84,8 @@ final class StatsViewModel {
         do {
             let results = try modelContext.fetch(descriptor)
             return results.first
-        } catch {
-            error = error
+        } catch let fetchError {
+            error = fetchError
             return nil
         }
     }
