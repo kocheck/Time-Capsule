@@ -18,7 +18,7 @@ included:
   - TimeCapsuleUITests
 
 excluded:
-  - TimeCapsule/Preview Content
+  - "TimeCapsule/Preview Content"
   - TimeCapsule/Resources/Generated
   - "**/.build"
   - "**/DerivedData"
