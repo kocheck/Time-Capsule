@@ -1,9 +1,13 @@
 import SwiftUI
 import SwiftData
+import os.log
 
 @main
 struct TimeCapsuleApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @State private var showStorageWarning = false
+    
+    private static let logger = Logger(subsystem: "com.timecapsule.app", category: "initialization")
 
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
@@ -20,13 +24,40 @@ struct TimeCapsuleApp: App {
         do {
             return try ModelContainer(for: schema, configurations: [modelConfiguration])
         } catch {
-            fatalError("Could not create ModelContainer: \(error)")
+            // Log the error for diagnostics
+            Self.logger.error("Failed to create ModelContainer: \(error.localizedDescription)")
+            
+            // Attempt recovery with in-memory storage as fallback
+            let fallbackConfig = ModelConfiguration(isStoredInMemoryOnly: true)
+            
+            do {
+                Self.logger.warning("Using in-memory storage as fallback - data will not persist")
+                return try ModelContainer(for: schema, configurations: [fallbackConfig])
+            } catch {
+                // If even in-memory storage fails, this indicates a critical system issue
+                // (e.g., SwiftData framework corruption or severe memory constraints)
+                Self.logger.critical("Failed to create fallback ModelContainer: \(error.localizedDescription)")
+                preconditionFailure("""
+                    Critical error: Unable to initialize in-memory storage.
+                    This indicates a system-level issue with SwiftData.
+                    Please restart your Mac or reinstall the application.
+                    Error: \(error.localizedDescription)
+                    """)
+            }
         }
     }()
+    
+    init() {
+        // Check if we're using in-memory storage (fallback mode) once at initialization
+        if let config = sharedModelContainer.configurations.first,
+           config.isStoredInMemoryOnly {
+            _showStorageWarning = State(initialValue: true)
+        }
+    }
 
     var body: some Scene {
         MenuBarExtra("Time Capsule", systemImage: "hourglass") {
-            ContentView()
+            ContentView(showStorageWarning: $showStorageWarning)
                 .modelContainer(sharedModelContainer)
                 .environment(\.appDelegate, appDelegate)
         }
@@ -50,6 +81,7 @@ struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var settingsViewModel: SettingsViewModel?
     @State private var showOnboarding = false
+    @Binding var showStorageWarning: Bool
 
     var body: some View {
         Group {
@@ -60,6 +92,13 @@ struct ContentView: View {
             } else {
                 MenuBarView(modelContext: modelContext)
             }
+        }
+        .alert("Storage Warning", isPresented: $showStorageWarning) {
+            Button("OK") {
+                showStorageWarning = false
+            }
+        } message: {
+            Text("Time Capsule could not access persistent storage. Your data will not be saved between sessions. Please check your disk permissions and available space, then restart the app.")
         }
         .onAppear {
             setupApp()
