@@ -219,7 +219,7 @@ final class DigestService {
     // MARK: - Cleanup
 
     func cleanupOldDigests(keepLast weeks: Int = 12) {
-        let calendar = Calendar.current
+        let calendar = Calendar(identifier: .iso8601)
         let cutoffDate = calendar.date(byAdding: .weekOfYear, value: -weeks, to: Date()) ?? Date()
 
         let descriptor = FetchDescriptor<WeeklyDigest>(
