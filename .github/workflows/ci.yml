@@ -38,8 +38,24 @@ jobs:
       - name: Install SwiftLint
         run: brew install swiftlint
 
-      - name: Lint
-        run: swiftlint lint --strict --reporter github-actions-logging
+      - name: Lint (Standard)
+        run: |
+          chmod +x Scripts/*.sh
+          ./Scripts/lint.sh --reporter github-actions-logging
+
+      - name: Lint (Strict)
+        if: github.event_name == 'pull_request'
+        run: ./Scripts/lint.sh --strict --reporter github-actions-logging
+
+      - name: Security Audit
+        run: ./Scripts/lint-security.sh
+
+      - name: Upload Security Report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-audit-report
+          path: security-audit-report.md
 
       - name: Build
         run: |

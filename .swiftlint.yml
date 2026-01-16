@@ -1,28 +1,16 @@
-disabled_rules:
-  - trailing_whitespace
-  - line_length
-  - function_body_length
-  - file_length
-  - type_body_length
-  - cyclomatic_complexity
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║                    TIME CAPSULE - SWIFTLINT CONFIGURATION                     ║
+# ║                                                                                ║
+# ║  Security-First • Data-Safe • Strictly Enforced                               ║
+# ║                                                                                ║
+# ║  Last Updated: 2026-01-16                                                     ║
+# ║  Maintainer: Time Capsule Team                                                 ║
+# ║  Context Doc: Documentation/LINTER_CONTEXT.md                                  ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
 
-opt_in_rules:
-  - empty_count
-  - empty_string
-  - explicit_init
-  - fatal_error_message
-  - first_where
-  - force_unwrapping
-  - implicitly_unwrapped_optional
-  - modifier_order
-  - multiline_arguments
-  - overridden_super_call
-  - private_outlet
-  - redundant_nil_coalescing
-  - sorted_first_last
-  - unneeded_parentheses_in_closure_argument
-  - vertical_whitespace_closing_braces
-  - vertical_whitespace_opening_braces
+# ============================================================================
+# PATH CONFIGURATION
+# ============================================================================
 
 included:
   - TimeCapsule
@@ -30,38 +18,237 @@ included:
   - TimeCapsuleUITests
 
 excluded:
-  - Carthage
-  - Pods
-  - .build
-  - DerivedData
+  - TimeCapsule/Preview Content
+  - TimeCapsule/Resources/Generated
+  - "**/.build"
+  - "**/DerivedData"
+  - "**/Pods"
+  - "**/Carthage"
+  - "**/vendor"
+  - "**/*.generated.swift"
+  - "**/Mocks/Generated"
+
+# ============================================================================
+# ANALYZER RULES (Build-time analysis)
+# ============================================================================
 
 analyzer_rules:
-  - unused_import
+  - capture_variable
+  - typesafe_array_init
   - unused_declaration
+  - unused_import
 
-line_length:
-  warning: 120
-  error: 200
-  ignores_function_declarations: true
-  ignores_comments: true
-  ignores_interpolated_strings: true
+# ============================================================================
+# OPT-IN RULES
+# ============================================================================
 
-function_body_length:
-  warning: 60
-  error: 100
+opt_in_rules:
+  # ── SECURITY & DATA SAFETY (Critical) ──
+  - force_unwrapping
+  - implicitly_unwrapped_optional
+  - unowned_variable_capture
+  - weak_delegate
+  - private_action
+  - private_outlet
+  - strong_iboutlet
+  - capture_variable
+  - unavailable_function
+  - required_deinit
+  - untyped_error_in_catch
+  - return_value_from_void_function
+  - discouraged_assert
+
+  # ── CODE QUALITY ──
+  - anonymous_argument_in_multiline_closure
+  - array_init
+  - closure_body_length
+  - closure_end_indentation
+  - closure_spacing
+  - collection_alignment
+  - conditional_returns_on_newline
+  - contains_over_filter_count
+  - contains_over_filter_is_empty
+  - contains_over_first_not_nil
+  - contains_over_range_nil_comparison
+  - convenience_type
+  - discouraged_none_name
+  - discouraged_object_literal
+  - empty_collection_literal
+  - empty_count
+  - empty_string
+  - enum_case_associated_values_count
+  - explicit_init
+  - extension_access_modifier
+  - fallthrough
+  - fatal_error_message
+  - file_name
+  - file_name_no_space
+  - first_where
+  - flatmap_over_map_reduce
+  - function_default_parameter_at_end
+  - ibinspectable_in_extension
+  - identical_operands
+  - implicit_return
+  - joined_default_parameter
+  - last_where
+  - legacy_multiple
+  - legacy_objc_type
+  - literal_expression_end_indentation
+  - local_doc_comment
+  - lower_acl_than_parent
+  - modifier_order
+  - multiline_arguments
+  - multiline_arguments_brackets
+  - multiline_function_chains
+  - multiline_literal_brackets
+  - multiline_parameters
+  - multiline_parameters_brackets
+  - number_separator
+  - operator_usage_whitespace
+  - optional_enum_case_matching
+  - overridden_super_call
+  - override_in_extension
+  - pattern_matching_keywords
+  - prefer_self_in_static_references
+  - prefer_self_type_over_type_of_self
+  - prefer_zero_over_explicit_init
+  - prefixed_toplevel_constant
+  - prohibited_interface_builder
+  - prohibited_super_call
+  - raw_value_for_camel_cased_codable_enum
+  - reduce_into
+  - redundant_nil_coalescing
+  - redundant_type_annotation
+  - self_binding
+  - shorthand_optional_binding
+  - single_test_class
+  - sorted_first_last
+  - sorted_imports
+  - static_operator
+  - strict_fileprivate
+  - switch_case_on_newline
+  - test_case_accessibility
+  - toggle_bool
+  - trailing_closure
+  - type_contents_order
+  - unneeded_parentheses_in_closure_argument
+  - vertical_parameter_alignment_on_call
+  - vertical_whitespace_between_cases
+  - vertical_whitespace_closing_braces
+  - vertical_whitespace_opening_braces
+  - xct_specific_matcher
+  - yoda_condition
+
+  # ── SWIFT TESTING ──
+  - quick_discouraged_call
+  - quick_discouraged_focused_test
+  - quick_discouraged_pending_test
+
+# ============================================================================
+# DISABLED RULES
+# ============================================================================
+
+disabled_rules:
+  - todo                    # We track TODOs with custom rule requiring issue numbers
+  - no_fallthrough_only     # Conflicts with fallthrough rule
+  - type_name               # Some SwiftUI patterns need flexibility
+
+# ============================================================================
+# RULE SEVERITY OVERRIDES (Security-Critical = Error)
+# ============================================================================
+
+# ── Security: Always Errors ──
+force_cast: error
+force_try: error
+force_unwrapping: error
+
+# ── Data Safety: Always Errors ──
+unused_closure_parameter: error
+
+# ── Code Quality: Errors ──
+trailing_whitespace:
+  severity: error
+opening_brace:
+  severity: error
+colon:
+  severity: error
+comma:
+  severity: error
+statement_position:
+  severity: error
+return_arrow_whitespace:
+  severity: error
+
+# ============================================================================
+# COMPLEXITY LIMITS
+# ============================================================================
 
 file_length:
-  warning: 500
-  error: 1000
+  warning: 350
+  error: 500
   ignore_comment_only_lines: true
 
 type_body_length:
-  warning: 300
-  error: 500
+  warning: 200
+  error: 350
+
+function_body_length:
+  warning: 35
+  error: 60
+
+function_parameter_count:
+  warning: 4
+  error: 6
+  ignores_default_parameters: true
+
+cyclomatic_complexity:
+  warning: 8
+  error: 15
+  ignores_case_statements: true
+
+nesting:
+  type_level:
+    warning: 2
+    error: 3
+  function_level:
+    warning: 2
+    error: 4
+
+closure_body_length:
+  warning: 25
+  error: 40
+
+large_tuple:
+  warning: 2
+  error: 3
+
+enum_case_associated_values_count:
+  warning: 3
+  error: 5
+
+# ============================================================================
+# LINE LENGTH
+# ============================================================================
+
+line_length:
+  warning: 110
+  error: 140
+  ignores_urls: true
+  ignores_function_declarations: false
+  ignores_comments: false
+  ignores_interpolated_strings: true
+
+# ============================================================================
+# NAMING CONVENTIONS
+# ============================================================================
 
 identifier_name:
-  min_length: 1
-  max_length: 60
+  min_length:
+    warning: 2
+    error: 1
+  max_length:
+    warning: 45
+    error: 55
   excluded:
     - id
     - x
@@ -70,5 +257,303 @@ identifier_name:
     - i
     - j
     - k
+    - ok
+    - to
+    - at
+    - by
+    - on
+    - up
+    - db
+    - ai
+    - ui
+    - ip
+    - os
+  validates_start_with_lowercase: error
+
+type_name:
+  min_length:
+    warning: 3
+    error: 2
+  max_length:
+    warning: 45
+    error: 55
+
+# ============================================================================
+# WHITESPACE & FORMATTING
+# ============================================================================
+
+vertical_whitespace:
+  max_empty_lines: 1
+
+trailing_whitespace:
+  ignores_empty_lines: false
+  ignores_comments: false
+
+trailing_comma:
+  mandatory_comma: true
+
+# ============================================================================
+# MULTILINE FORMATTING
+# ============================================================================
+
+multiline_arguments:
+  first_argument_location: next_line
+  only_enforce_after_first_closure_on_first_line: true
+
+multiline_parameters:
+  allowsSingleLine: true
+
+# ============================================================================
+# MODIFIER ORDER
+# ============================================================================
+
+modifier_order:
+  preferred_modifier_order:
+    - override
+    - acl
+    - setterACL
+    - dynamic
+    - mutators
+    - lazy
+    - final
+    - required
+    - convenience
+    - typeMethods
+    - owned
+
+# ============================================================================
+# TYPE CONTENTS ORDER
+# ============================================================================
+
+type_contents_order:
+  order:
+    - associated_type
+    - type_alias
+    - case
+    - subtype
+    - type_property
+    - instance_property
+    - ib_inspectable
+    - ib_outlet
+    - initializer
+    - deinitializer
+    - type_method
+    - view_life_cycle
+    - ib_action
+    - other_method
+    - subscript
+
+# ============================================================================
+# ATTRIBUTES PLACEMENT
+# ============================================================================
+
+attributes:
+  always_on_same_line:
+    - "@IBAction"
+    - "@IBOutlet"
+    - "@objc"
+    - "@nonobjc"
+    - "@Published"
+    - "@ObservedObject"
+    - "@StateObject"
+    - "@EnvironmentObject"
+    - "@Environment"
+    - "@Binding"
+    - "@State"
+    - "@AppStorage"
+    - "@SceneStorage"
+    - "@FocusState"
+    - "@Query"
+    - "@Attribute"
+    - "@Relationship"
+    - "@Model"
+  always_on_line_above:
+    - "@discardableResult"
+    - "@available"
+    - "@MainActor"
+    - "@testable"
+    - "@Test"
+    - "@Suite"
+    - "@ViewBuilder"
+    - "@resultBuilder"
+    - "@propertyWrapper"
+    - "@Observable"
+
+# ============================================================================
+# IMPLICITLY UNWRAPPED OPTIONALS
+# ============================================================================
+
+implicitly_unwrapped_optional:
+  mode: all
+  severity: error
+
+# ============================================================================
+# SORTED IMPORTS
+# ============================================================================
+
+sorted_imports:
+  severity: error
+
+# ============================================================================
+# CUSTOM RULES - SECURITY CRITICAL
+# ============================================================================
+
+custom_rules:
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # DATA SAFETY RULES
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  no_unencrypted_storage:
+    name: "No Unencrypted Sensitive Storage"
+    regex: "UserDefaults.*(?:password|token|secret|key|credential|apiKey|api_key)"
+    message: "Never store sensitive data in UserDefaults. Use Keychain via KeychainService."
+    severity: error
+
+  no_direct_userdefaults:
+    name: "No Direct UserDefaults"
+    regex: "UserDefaults\\.standard(?!\\.register)"
+    message: "Use AppSettings (SwiftData) instead of UserDefaults for app preferences."
+    severity: warning
+    excluded:
+      - ".*Tests?\\.swift$"
+      - ".*Preview.*\\.swift$"
+
+  no_direct_filemanager_write:
+    name: "No Direct FileManager Write"
+    regex: "FileManager\\.default\\.(?:createFile|write|moveItem|copyItem)"
+    message: "Use DataService for all file operations to ensure proper error handling and backup."
+    severity: warning
+    excluded:
+      - ".*DataService\\.swift$"
+      - ".*Tests?\\.swift$"
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # SECURITY RULES
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  no_print_statements:
+    name: "No Print Statements"
+    regex: "\\bprint\\s*\\("
+    message: "Use Logger instead of print(). Prints may leak sensitive data in production."
+    severity: error
+    excluded:
+      - ".*Tests?\\.swift$"
+      - ".*Preview.*\\.swift$"
+
+  no_nslog:
+    name: "No NSLog"
+    regex: "\\bNSLog\\s*\\("
+    message: "Use Logger instead of NSLog. NSLog persists to device logs."
+    severity: error
+
+  no_debugprint:
+    name: "No Debug Print"
+    regex: "\\bdebugPrint\\s*\\("
+    message: "Use Logger with appropriate log level instead of debugPrint()."
+    severity: error
+    excluded:
+      - ".*Tests?\\.swift$"
+
+  no_dump:
+    name: "No Dump"
+    regex: "\\bdump\\s*\\("
+    message: "dump() can expose sensitive data. Use Logger with redaction."
+    severity: error
+    excluded:
+      - ".*Tests?\\.swift$"
+
+  no_force_try:
+    name: "No Force Try"
+    regex: "\\btry!\\s"
+    message: "Force try crashes on error. Use do-catch with proper error handling."
+    severity: error
+    excluded:
+      - ".*Tests?\\.swift$"
+      - ".*Preview.*\\.swift$"
+
+  no_force_cast:
+    name: "No Force Cast"
+    regex: "\\bas!\\s"
+    message: "Force cast crashes on failure. Use 'as?' with proper nil handling."
+    severity: error
+    excluded:
+      - ".*Tests?\\.swift$"
+
+  no_fatalError_production:
+    name: "No fatalError in Production"
+    regex: "fatalError\\s*\\("
+    message: "fatalError crashes the app. Use proper error handling or preconditionFailure for truly impossible states."
+    severity: error
+    excluded:
+      - ".*Tests?\\.swift$"
+      - ".*Preview.*\\.swift$"
+      - ".*Mock.*\\.swift$"
+
+  no_unvalidated_url:
+    name: "No Unvalidated URL Construction"
+    regex: "URL\\(string:\\s*[^)]+\\)!"
+    message: "Never force unwrap URL construction. Validate URLs properly."
+    severity: error
+
+  no_hardcoded_secrets:
+    name: "No Hardcoded Secrets"
+    regex: "(?:password|secret|token|apiKey|api_key|private_key)\\s*[:=]\\s*\"[^\"]+\""
+    message: "Never hardcode secrets. Use environment variables or secure storage."
+    severity: error
+
+  no_http_urls:
+    name: "No HTTP URLs"
+    regex: "\"http://(?!localhost|127\\.0\\.0\\.1|0\\.0\\.0\\.0)"
+    message: "Use HTTPS for all external URLs. HTTP is insecure."
+    severity: error
+    excluded:
+      - ".*Tests?\\.swift$"
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # ERROR HANDLING RULES
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  no_empty_catch:
+    name: "No Empty Catch Blocks"
+    regex: "catch\\s*(?:\\{\\s*\\}|\\{\\s*\\/\\/.*\\s*\\})"
+    message: "Never silently swallow errors. Log them or handle appropriately."
+    severity: error
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # CONCURRENCY & THREAD SAFETY RULES
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  no_sync_on_main:
+    name: "No Sync on Main Thread"
+    regex: "DispatchQueue\\.main\\.sync"
+    message: "Synchronous dispatch to main thread can cause deadlocks."
+    severity: error
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # CODE ORGANIZATION RULES
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  mark_comment_format:
+    name: "MARK Comment Format"
+    regex: "//\\s*MARK:(?!\\s*-\\s*[A-Z])"
+    message: "Use '// MARK: - Section Name' format with dash and capitalized name."
+    severity: warning
+
+  todo_with_tracking:
+    name: "TODO Requires Issue Number"
+    regex: "//\\s*(?:TODO|FIXME|HACK|XXX)(?!.*(?:#\\d+|@\\w+|\\[TC-\\d+\\]))"
+    message: "TODOs must reference an issue: // TODO: [TC-123] or // TODO: @username"
+    severity: warning
+
+  fixme_is_error:
+    name: "FIXME Should Be Fixed"
+    regex: "//\\s*FIXME"
+    message: "FIXME indicates broken code. Fix it or convert to TODO with issue number."
+    severity: error
+
+# ============================================================================
+# REPORTER
+# ============================================================================
 
 reporter: "xcode"

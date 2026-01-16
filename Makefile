@@ -1,21 +1,26 @@
-.PHONY: help setup build test lint clean run archive install
+.PHONY: help setup build test lint lint-fix lint-strict lint-security lint-staged clean run archive install
 
 help:
 	@echo "Time Capsule Build System"
 	@echo ""
 	@echo "Available targets:"
-	@echo "  setup    - Install dependencies and prepare environment"
-	@echo "  build    - Build the application"
-	@echo "  test     - Run all tests"
-	@echo "  lint     - Run SwiftLint"
-	@echo "  clean    - Clean build artifacts"
-	@echo "  run      - Build and run the application"
-	@echo "  archive  - Create release archive"
-	@echo "  install  - Install built app to Applications"
+	@echo "  setup          - Install dependencies and prepare environment"
+	@echo "  build          - Build the application"
+	@echo "  test           - Run all tests"
+	@echo "  lint           - Run standard SwiftLint"
+	@echo "  lint-fix       - Run SwiftLint with auto-fix"
+	@echo "  lint-strict    - Run strict CI-level linting"
+	@echo "  lint-security  - Run security audit"
+	@echo "  lint-staged    - Lint only staged files"
+	@echo "  clean          - Clean build artifacts"
+	@echo "  run            - Build and run the application"
+	@echo "  archive        - Create release archive"
+	@echo "  install        - Install built app to Applications"
 
 setup:
 	@echo "Setting up Time Capsule development environment..."
 	@Scripts/setup.sh
+	@Scripts/install-hooks.sh
 
 build:
 	@echo "Building Time Capsule..."
@@ -30,8 +35,19 @@ test:
 	@Scripts/test.sh
 
 lint:
-	@echo "Running SwiftLint..."
 	@Scripts/lint.sh
+
+lint-fix:
+	@Scripts/lint.sh --fix
+
+lint-strict:
+	@Scripts/lint.sh --strict
+
+lint-security:
+	@Scripts/lint-security.sh
+
+lint-staged:
+	@Scripts/lint-staged.sh
 
 clean:
 	@echo "Cleaning build artifacts..."
@@ -40,6 +56,8 @@ clean:
 		-scheme TimeCapsule
 	@rm -rf DerivedData
 	@rm -rf .build
+	@rm -f lint-report.html
+	@rm -f security-audit-report.md
 
 run: build
 	@echo "Running Time Capsule..."

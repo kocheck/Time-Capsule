@@ -97,9 +97,33 @@ make test
 
 ### Linting
 
+Time Capsule uses a **security-first linting strategy** with comprehensive custom rules:
+
 ```bash
+# Standard linting
 make lint
+
+# Auto-fix issues
+make lint-fix
+
+# Strict CI-level linting
+make lint-strict
+
+# Security audit
+make lint-security
+
+# Lint only staged files (pre-commit)
+make lint-staged
 ```
+
+**Security Features:**
+- No hardcoded secrets detection
+- No print statements (prevents data leaks)
+- Force unwrap prevention
+- Empty catch block detection
+- HTTP URL detection (require HTTPS)
+
+See [Documentation/LINTER_CONTEXT.md](Documentation/LINTER_CONTEXT.md) for full details.
 
 ## Contributing
 

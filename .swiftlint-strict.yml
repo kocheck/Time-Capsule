@@ -1,0 +1,48 @@
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║              TIME CAPSULE - STRICT CI CONFIGURATION                           ║
+# ║                                                                                ║
+# ║  This config is used in CI only - even stricter than development              ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+
+parent_config: .swiftlint.yml
+
+# Override to be stricter
+file_length:
+  warning: 300
+  error: 400
+
+type_body_length:
+  warning: 150
+  error: 250
+
+function_body_length:
+  warning: 25
+  error: 45
+
+cyclomatic_complexity:
+  warning: 6
+  error: 12
+
+line_length:
+  warning: 100
+  error: 120
+
+# Promote warnings to errors in CI
+force_unwrapping:
+  severity: error
+
+implicitly_unwrapped_optional:
+  severity: error
+
+# Additional strict rules for CI
+opt_in_rules:
+  - explicit_acl
+  - explicit_top_level_acl
+  - explicit_type_interface
+
+# Require explicit access control
+explicit_acl:
+  severity: warning
+
+explicit_top_level_acl:
+  severity: warning
