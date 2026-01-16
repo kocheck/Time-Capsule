@@ -21,7 +21,8 @@ final class TaskViewModel {
         title: String,
         description: String? = nil,
         tags: [String] = [],
-        priority: TaskPriority = .normal
+        priority: TaskPriority = .normal,
+        contextHints: [String] = []
     ) throws {
         let task = TaskItem(
             title: title.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -29,11 +30,23 @@ final class TaskViewModel {
             tags: tags.map { $0.lowercased().trimmingCharacters(in: .whitespaces) },
             priority: priority
         )
+        task.contextHints = contextHints.map { $0.lowercased().trimmingCharacters(in: .whitespaces) }
 
         modelContext.insert(task)
         try modelContext.save()
 
         statsService.incrementCreated()
+    }
+
+    /// Create a task from a parsed natural language input
+    func createTask(from parsedTask: ParsedTask) throws {
+        try createTask(
+            title: parsedTask.title,
+            description: parsedTask.description,
+            tags: parsedTask.tags,
+            priority: parsedTask.priority,
+            contextHints: parsedTask.contextHints
+        )
     }
 
     func completeTask(_ task: TaskItem) throws {
