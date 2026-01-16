@@ -46,19 +46,20 @@ struct TimeCapsuleApp: App {
             }
         }
     }()
+    
+    init() {
+        // Check if we're using in-memory storage (fallback mode) once at initialization
+        if let config = sharedModelContainer.configurations.first,
+           config.isStoredInMemoryOnly {
+            _showStorageWarning = State(initialValue: true)
+        }
+    }
 
     var body: some Scene {
         MenuBarExtra("Time Capsule", systemImage: "hourglass") {
             ContentView(showStorageWarning: $showStorageWarning)
                 .modelContainer(sharedModelContainer)
                 .environment(\.appDelegate, appDelegate)
-                .onAppear {
-                    // Check if we're using in-memory storage (fallback mode)
-                    if let config = sharedModelContainer.configurations.first,
-                       config.isStoredInMemoryOnly {
-                        showStorageWarning = true
-                    }
-                }
         }
         .menuBarExtraStyle(.window)
     }
