@@ -29,8 +29,7 @@ jobs:
         run: |
           xcodebuild -exportArchive \
             -archivePath ./build/TimeCapsule.xcarchive \
-            -exportPath ./build/Release \
-            -exportOptionsPlist ExportOptions.plist
+            -exportPath ./build/Release
 
       - name: Create DMG
         run: |
