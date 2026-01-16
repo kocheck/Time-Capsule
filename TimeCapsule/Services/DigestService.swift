@@ -157,10 +157,12 @@ final class DigestService {
 
     private func fetchCompletedTasks(from startDate: Date, to endDate: Date) throws -> [TaskItem] {
         let batchSize = 500
+        let maxIterations = 100 // Safety guard: max 50,000 tasks (100 * 500)
         var offset = 0
         var results: [TaskItem] = []
+        var iteration = 0
 
-        while true {
+        while iteration < maxIterations {
             let descriptor = FetchDescriptor<TaskItem>(
                 predicate: #Predicate<TaskItem> { task in
                     task.completedAt != nil
@@ -190,6 +192,7 @@ final class DigestService {
             }
 
             offset += batchSize
+            iteration += 1
         }
 
         return results
