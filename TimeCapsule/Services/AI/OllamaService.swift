@@ -141,7 +141,7 @@ final class OllamaService: AIServiceProtocol {
         let dailySummary = context.dailyStats.map { "\($0.dayName): \($0.completedCount)done/\($0.skippedCount)skip" }
             .joined(separator: ", ")
 
-        let staleList = context.staleTasks.prefix(5).map { $0.title }.joined(separator: ", ")
+        let staleList = context.staleTasks.map { $0.title }.joined(separator: ", ")
 
         return """
         Generate a weekly productivity digest for \(weekRange).

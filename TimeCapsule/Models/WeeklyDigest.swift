@@ -36,10 +36,11 @@ final class WeeklyDigest: Identifiable {
         averageCompletionRate: Double = 0,
         streakAtGeneration: Int = 0
     ) {
+        let calendar = Calendar(identifier: .iso8601)
         self.id = UUID()
         self.weekKey = Self.formatWeekKey(weekStartDate)
-        self.weekStartDate = Calendar.current.startOfDay(for: weekStartDate)
-        self.weekEndDate = Calendar.current.date(byAdding: .day, value: 6, to: self.weekStartDate) ?? weekStartDate
+        self.weekStartDate = calendar.startOfDay(for: weekStartDate)
+        self.weekEndDate = calendar.date(byAdding: .day, value: 6, to: self.weekStartDate) ?? weekStartDate
         self.generatedAt = Date()
         self.summaryText = summaryText
         self.accomplishments = accomplishments
