@@ -71,11 +71,15 @@ struct DailyStatsSummary: Codable, Sendable {
     let createdCount: Int
     let completionRate: Double
 
-    init(from stats: DailyStats) {
-        self.date = stats.date
+    private static let dayNameFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "EEEE"
-        self.dayName = formatter.string(from: stats.date)
+        return formatter
+    }()
+
+    init(from stats: DailyStats) {
+        self.date = stats.date
+        self.dayName = DailyStatsSummary.dayNameFormatter.string(from: stats.date)
         self.completedCount = stats.completedCount
         self.skippedCount = stats.skippedCount
         self.createdCount = stats.createdCount
@@ -96,7 +100,9 @@ struct CompletedTaskSummary: Codable, Sendable {
         self.title = task.title
         self.tags = task.tags
         self.priority = task.priority.rawValue
-        self.completedAt = task.completedAt ?? Date()
+        // `DigestService.fetchCompletedTasks()` filters tasks to those with `completedAt != nil`,
+        // so this force-unwrap is safe under that invariant and avoids masking bugs with a fallback date.
+        self.completedAt = task.completedAt!
         self.daysSinceCreation = task.daysSinceCreation
     }
 }

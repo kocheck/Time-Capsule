@@ -13,6 +13,8 @@ struct WeeklyDigestView: View {
             VStack(spacing: 16) {
                 if viewModel.isLoading {
                     loadingView
+                } else if let errorMessage = viewModel.errorMessage {
+                    errorView(errorMessage)
                 } else if viewModel.hasDigest {
                     digestContent
                 } else {
@@ -36,6 +38,39 @@ struct WeeklyDigestView: View {
                 .foregroundColor(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Error View
+
+    private func errorView(_ message: String) -> some View {
+        VStack(spacing: 16) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 48))
+                .foregroundColor(.red)
+
+            Text("Failed to Generate Digest")
+                .font(.headline)
+
+            Text(message)
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+
+            Button {
+                Task {
+                    await viewModel.generateDigest()
+                }
+            } label: {
+                HStack {
+                    Image(systemName: "arrow.clockwise")
+                    Text("Try Again")
+                }
+                .padding(.vertical, 8)
+                .padding(.horizontal, 16)
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .padding(.vertical, 40)
     }
 
     // MARK: - Empty State

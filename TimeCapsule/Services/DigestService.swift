@@ -104,8 +104,9 @@ final class DigestService {
     // MARK: - Context Building
 
     private func buildWeeklyContext(forWeekStarting weekStart: Date) throws -> WeeklyContext {
-        let calendar = Calendar.current
-        let weekEnd = calendar.date(byAdding: .day, value: 6, to: weekStart) ?? weekStart
+        let calendar = Calendar(identifier: .iso8601)
+        let rawWeekEnd = calendar.date(byAdding: .day, value: 6, to: weekStart) ?? weekStart
+        let weekEnd = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: rawWeekEnd) ?? rawWeekEnd
 
         // Get daily stats for the week
         let dailyStats = getStatsForWeek(startDate: weekStart, endDate: weekEnd)
@@ -155,20 +156,46 @@ final class DigestService {
     }
 
     private func fetchCompletedTasks(from startDate: Date, to endDate: Date) throws -> [TaskItem] {
-        let descriptor = FetchDescriptor<TaskItem>(
-            predicate: #Predicate<TaskItem> { task in
-                task.completedAt != nil
-            },
-            sortBy: [SortDescriptor(\.completedAt, order: .reverse)]
-        )
+        let batchSize = 500
+        let maxIterations = 100 // Safety guard: max 50,000 tasks (100 * 500)
+        var offset = 0
+        var results: [TaskItem] = []
+        var iteration = 0
 
-        let allCompleted = try modelContext.fetch(descriptor)
+        while iteration < maxIterations {
+            let descriptor = FetchDescriptor<TaskItem>(
+                predicate: #Predicate<TaskItem> { task in
+                    task.completedAt != nil
+                },
+                sortBy: [SortDescriptor(\.completedAt, order: .reverse)],
+                fetchLimit: batchSize,
+                fetchOffset: offset
+            )
 
-        // Filter by date range (SwiftData predicate limitations with optionals)
-        return allCompleted.filter { task in
-            guard let completedAt = task.completedAt else { return false }
-            return completedAt >= startDate && completedAt <= endDate
+            let batch = try modelContext.fetch(descriptor)
+            if batch.isEmpty {
+                break
+            }
+
+            // Filter by date range (SwiftData predicate limitations with optionals)
+            let inRange = batch.filter { task in
+                guard let completedAt = task.completedAt else { return false }
+                return completedAt >= startDate && completedAt <= endDate
+            }
+            results.append(contentsOf: inRange)
+
+            // Since tasks are sorted by completedAt in reverse (newest first),
+            // once the oldest task in this batch is older than startDate,
+            // all subsequent batches will also be out of range.
+            if let lastCompletedAt = batch.last?.completedAt, lastCompletedAt < startDate {
+                break
+            }
+
+            offset += batchSize
+            iteration += 1
         }
+
+        return results
     }
 
     private func fetchStaleTasks() throws -> [TaskItem] {
@@ -192,7 +219,7 @@ final class DigestService {
     // MARK: - Cleanup
 
     func cleanupOldDigests(keepLast weeks: Int = 12) {
-        let calendar = Calendar.current
+        let calendar = Calendar(identifier: .iso8601)
         let cutoffDate = calendar.date(byAdding: .weekOfYear, value: -weeks, to: Date()) ?? Date()
 
         let descriptor = FetchDescriptor<WeeklyDigest>(
