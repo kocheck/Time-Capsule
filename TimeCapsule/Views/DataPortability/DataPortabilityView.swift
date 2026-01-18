@@ -410,43 +410,320 @@ struct ExportSheetView: View {
 
 struct ImportSheetView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+
+    @State private var selectedSource: ImportSource = .universalTaskFormat
+    @State private var selectedFileURL: URL?
+    @State private var isImporting = false
+    @State private var importResult: ImportResult?
+    @State private var importError: Error?
+    @State private var showingFilePicker = false
 
     var body: some View {
         VStack(spacing: 20) {
             Text("Import Data")
                 .font(.title2.bold())
 
-            Text("Import functionality will be available in the next update.")
-                .foregroundStyle(.secondary)
+            // Source Selection
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Import From")
+                    .font(.headline)
 
-            Button("OK") {
-                dismiss()
+                Picker("Source", selection: $selectedSource) {
+                    ForEach(ImportSource.allCases) { source in
+                        Label(source.rawValue, systemImage: source.icon)
+                            .tag(source)
+                    }
+                }
+                .pickerStyle(.menu)
+                .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
+
+            // File Selection
+            VStack(alignment: .leading, spacing: 8) {
+                Text("File")
+                    .font(.headline)
+
+                HStack {
+                    if let url = selectedFileURL {
+                        Text(url.lastPathComponent)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    } else {
+                        Text("No file selected")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    Button("Choose File...") {
+                        showFilePicker()
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
+
+            // Instructions
+            GroupBox {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(selectedSource.exportInstructions)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 4)
+            }
+
+            // Result
+            if let result = importResult {
+                GroupBox {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("Import Complete", systemImage: "checkmark.circle.fill")
+                            .font(.subheadline.bold())
+                            .foregroundStyle(.green)
+
+                        Text("Imported: \(result.importedCount) tasks")
+                            .font(.caption)
+
+                        if result.skippedCount > 0 {
+                            Text("Skipped: \(result.skippedCount) tasks")
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+
+            if let error = importError {
+                GroupBox {
+                    Label(error.localizedDescription, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+            }
+
+            Spacer()
+
+            // Buttons
+            HStack {
+                Button("Cancel") {
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
+
+                Spacer()
+
+                Button("Import") {
+                    Task { await performImport() }
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+                .disabled(selectedFileURL == nil || isImporting)
+            }
         }
         .padding()
-        .frame(width: 450)
+        .frame(width: 500, height: 500)
+    }
+
+    @MainActor
+    private func showFilePicker() {
+        let panel = NSOpenPanel()
+        panel.title = "Select File to Import"
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowedContentTypes = [.json, .commaSeparatedText]
+
+        if panel.runModal() == .OK {
+            selectedFileURL = panel.url
+            importResult = nil
+            importError = nil
+        }
+    }
+
+    @MainActor
+    private func performImport() async {
+        guard let fileURL = selectedFileURL else { return }
+
+        isImporting = true
+        importError = nil
+        defer { isImporting = false }
+
+        do {
+            let coordinator = ImportCoordinator(modelContext: modelContext)
+            let result = try await coordinator.importData(
+                from: fileURL,
+                source: selectedSource,
+                options: ImportOptions()
+            )
+            importResult = result
+        } catch {
+            importError = error
+        }
     }
 }
 
 struct BackupSheetView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+
+    @State private var backupName = ""
+    @State private var useEncryption = false
+    @State private var password = ""
+    @State private var confirmPassword = ""
+    @State private var isCreatingBackup = false
+    @State private var backupResult: Backup?
+    @State private var backupError: Error?
 
     var body: some View {
         VStack(spacing: 20) {
             Text("Create Backup")
                 .font(.title2.bold())
 
-            Text("Backup functionality will be available in the next update.")
-                .foregroundStyle(.secondary)
+            // Backup Name
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Backup Name")
+                    .font(.headline)
 
-            Button("OK") {
-                dismiss()
+                TextField("Optional - auto-generated if empty", text: $backupName)
+                    .textFieldStyle(.roundedBorder)
             }
-            .buttonStyle(.borderedProminent)
+
+            // Encryption Options
+            VStack(alignment: .leading, spacing: 8) {
+                Toggle("Encrypt Backup", isOn: $useEncryption)
+                    .font(.headline)
+
+                if useEncryption {
+                    VStack(alignment: .leading, spacing: 8) {
+                        SecureField("Password", text: $password)
+                            .textFieldStyle(.roundedBorder)
+
+                        SecureField("Confirm Password", text: $confirmPassword)
+                            .textFieldStyle(.roundedBorder)
+
+                        if !password.isEmpty && !confirmPassword.isEmpty && password != confirmPassword {
+                            Label("Passwords do not match", systemImage: "exclamationmark.triangle.fill")
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                        }
+
+                        Text("Recommended: Use a strong password you'll remember. This cannot be recovered if lost.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            // Info
+            GroupBox {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("What's Included", systemImage: "info.circle")
+                        .font(.subheadline.bold())
+
+                    Text("• All active tasks\n• All completed tasks\n• All archived tasks\n• App settings")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 4)
+            }
+
+            // Result
+            if let backup = backupResult {
+                GroupBox {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("Backup Created", systemImage: "checkmark.circle.fill")
+                            .font(.subheadline.bold())
+                            .foregroundStyle(.green)
+
+                        Text("Name: \(backup.name)")
+                            .font(.caption)
+
+                        Text("Size: \(backup.fileSizeFormatted)")
+                            .font(.caption)
+
+                        Text("Tasks: \(backup.taskCount)")
+                            .font(.caption)
+
+                        if backup.isEncrypted {
+                            Label("Encrypted", systemImage: "lock.fill")
+                                .font(.caption)
+                                .foregroundStyle(.blue)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+
+            if let error = backupError {
+                GroupBox {
+                    Label(error.localizedDescription, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+            }
+
+            Spacer()
+
+            // Buttons
+            HStack {
+                Button("Cancel") {
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
+
+                Spacer()
+
+                Button(backupResult != nil ? "Done" : "Create Backup") {
+                    if backupResult != nil {
+                        dismiss()
+                    } else {
+                        Task { await createBackup() }
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+                .disabled(isCreatingBackup || (useEncryption && passwordsInvalid))
+            }
         }
         .padding()
-        .frame(width: 450)
+        .frame(width: 500, height: 550)
+    }
+
+    private var passwordsInvalid: Bool {
+        password.isEmpty || confirmPassword.isEmpty || password != confirmPassword
+    }
+
+    @MainActor
+    private func createBackup() async {
+        isCreatingBackup = true
+        backupError = nil
+        defer { isCreatingBackup = false }
+
+        do {
+            let exportCoordinator = ExportCoordinator(modelContext: modelContext)
+            let backupManager = BackupManager(
+                modelContext: modelContext,
+                exportCoordinator: exportCoordinator
+            )
+
+            let backup = try await backupManager.createBackup(
+                name: backupName.isEmpty ? nil : backupName,
+                encrypt: useEncryption,
+                password: useEncryption ? password : nil
+            )
+
+            backupResult = backup
+
+            // Clear sensitive data
+            password = ""
+            confirmPassword = ""
+        } catch {
+            backupError = error
+        }
     }
 }
 
