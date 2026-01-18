@@ -10,6 +10,63 @@ actor ImportCoordinator {
         self.modelContext = modelContext
     }
 
+    // MARK: - Preview Generation
+
+    func generatePreview(from url: URL, source: ImportSource) async throws -> ImportPreview {
+        logger.info("Generating import preview from \(source.rawValue)")
+
+        // Read and parse file
+        let data = try Data(contentsOf: url)
+        let parser = createParser(for: source)
+        let importedTasks = try await parser.parse(data)
+
+        // Calculate date range
+        let dates = importedTasks.compactMap { $0.createdAt }
+        let dateRange: ClosedRange<Date>? = if let min = dates.min(), let max = dates.max() {
+            min...max
+        } else {
+            nil
+        }
+
+        // Gather tags
+        let tags = Set(importedTasks.flatMap { $0.tags })
+
+        // Sample tasks
+        let sampleTasks = importedTasks.prefix(5).map { ImportedTaskPreview(from: $0) }
+
+        // Detect conflicts
+        let conflicts = try await detectConflicts(importedTasks)
+
+        return ImportPreview(
+            source: source,
+            taskCount: importedTasks.count,
+            dateRange: dateRange,
+            tags: tags,
+            sampleTasks: Array(sampleTasks),
+            potentialConflicts: conflicts
+        )
+    }
+
+    private func detectConflicts(_ importedTasks: [ImportedTask]) async throws -> [ImportConflict] {
+        var conflicts: [ImportConflict] = []
+
+        // Fetch existing tasks
+        let existingTasks = try modelContext.fetch(FetchDescriptor<TaskItem>())
+
+        for importedTask in importedTasks {
+            // Check for duplicate titles
+            if let existing = existingTasks.first(where: { $0.title.lowercased() == importedTask.title.lowercased() }) {
+                conflicts.append(ImportConflict(
+                    importedTask: importedTask,
+                    existingTask: existing,
+                    conflictType: .duplicateTitle
+                ))
+            }
+        }
+
+        return conflicts
+    }
+
     // MARK: - Import Entry Point
 
     func importData(

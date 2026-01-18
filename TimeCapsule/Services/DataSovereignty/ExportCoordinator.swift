@@ -12,6 +12,49 @@ actor ExportCoordinator {
         self.modelContext = modelContext
     }
 
+    // MARK: - Preview Generation
+
+    func generatePreview(options: ExportOptions) async throws -> ExportPreview {
+        logger.info("Generating export preview")
+
+        // Fetch data based on options
+        let tasks = try await fetchActiveTasks()
+        let completedTasks = options.includeCompleted ? try await fetchCompletedTasks() : []
+        let archivedTasks = options.includeArchived ? try await fetchArchivedTasks() : []
+
+        let allTasks = tasks + completedTasks + archivedTasks
+
+        // Calculate date range
+        let dates = allTasks.map { $0.createdAt }
+        let dateRange: ClosedRange<Date>? = if let min = dates.min(), let max = dates.max() {
+            min...max
+        } else {
+            nil
+        }
+
+        // Gather tags
+        let tags = Set(allTasks.flatMap { $0.tags })
+
+        // Sample tasks
+        let sampleTasks = tasks.prefix(5).map { TaskPreview(from: $0) }
+
+        // Estimate size (rough approximation)
+        let avgTaskSize = 500 // bytes per task
+        let estimatedSize = allTasks.count * avgTaskSize
+
+        return ExportPreview(
+            activeCount: tasks.count,
+            completedCount: completedTasks.count,
+            archivedCount: archivedTasks.count,
+            totalCount: allTasks.count,
+            dateRange: dateRange,
+            estimatedSizeBytes: estimatedSize,
+            tags: tags,
+            sampleTasks: Array(sampleTasks),
+            includesSettings: options.includeSettings
+        )
+    }
+
     // MARK: - Main Export Functions
 
     func export(

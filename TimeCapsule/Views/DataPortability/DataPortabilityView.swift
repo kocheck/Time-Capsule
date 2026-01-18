@@ -220,38 +220,74 @@ struct ImportTabView: View {
 // MARK: - Backup Tab
 
 struct BackupTabView: View {
+    @Environment(\.modelContext) private var modelContext
     @Binding var showingSheet: Bool
+    @State private var viewModel: BackupViewModel?
+    @State private var showingRestoreSheet = false
+    @State private var selectedBackup: Backup?
+    @State private var showingDeleteConfirmation = false
+    @State private var backupToDelete: Backup?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Backups")
-                .font(.headline)
+            HStack {
+                Text("Backups")
+                    .font(.headline)
+
+                Spacer()
+
+                if let viewModel = viewModel, viewModel.isLoading {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                }
+
+                Button {
+                    Task { await viewModel?.loadBackups() }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .buttonStyle(.borderless)
+            }
 
             Text("Create encrypted backups of all your data for safekeeping.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
 
-            GroupBox {
-                VStack(alignment: .leading, spacing: 12) {
-                    Label("Automatic Protection", systemImage: "shield.checkered")
-                        .font(.subheadline.bold())
+            // Backup List
+            if let viewModel = viewModel, !viewModel.backups.isEmpty {
+                ScrollView {
+                    VStack(spacing: 12) {
+                        ForEach(viewModel.backups) { backup in
+                            BackupRow(
+                                backup: backup,
+                                onRestore: {
+                                    selectedBackup = backup
+                                    showingRestoreSheet = true
+                                },
+                                onDelete: {
+                                    backupToDelete = backup
+                                    showingDeleteConfirmation = true
+                                }
+                            )
+                        }
+                    }
+                }
+            } else {
+                VStack(spacing: 12) {
+                    Image(systemName: "externaldrive.badge.xmark")
+                        .font(.system(size: 48))
+                        .foregroundStyle(.secondary)
 
-                    Text("Backups include all tasks, settings, and metadata. Optionally encrypt with a password for maximum security.")
+                    Text("No backups yet")
                         .font(.callout)
                         .foregroundStyle(.secondary)
+
+                    Text("Create your first backup to protect your data")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
                 }
-                .padding(.vertical, 4)
-            }
-
-            VStack(alignment: .leading, spacing: 8) {
-                Label("Recent Backups", systemImage: "clock")
-                    .font(.subheadline.bold())
-
-                Text("No backups yet")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .padding(.vertical, 20)
-                    .frame(maxWidth: .infinity, alignment: .center)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 40)
             }
 
             Spacer()
@@ -266,6 +302,247 @@ struct BackupTabView: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
             }
+        }
+        .task {
+            if viewModel == nil {
+                viewModel = BackupViewModel(modelContext: modelContext)
+                await viewModel?.loadBackups()
+            }
+        }
+        .sheet(isPresented: $showingRestoreSheet) {
+            if let backup = selectedBackup {
+                RestoreBackupSheet(backup: backup, onComplete: {
+                    Task { await viewModel?.loadBackups() }
+                })
+            }
+        }
+        .alert("Delete Backup?", isPresented: $showingDeleteConfirmation) {
+            Button("Cancel", role: .cancel) {}
+            Button("Delete", role: .destructive) {
+                if let backup = backupToDelete {
+                    Task {
+                        try? await viewModel?.deleteBackup(backup)
+                    }
+                }
+            }
+        } message: {
+            if let backup = backupToDelete {
+                Text("Are you sure you want to delete '\(backup.name)'? This cannot be undone.")
+            }
+        }
+    }
+}
+
+// MARK: - Backup Row
+
+struct BackupRow: View {
+    let backup: Backup
+    let onRestore: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        GroupBox {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: backup.isEncrypted ? "lock.shield.fill" : "externaldrive.fill")
+                    .font(.title2)
+                    .foregroundStyle(backup.isEncrypted ? .blue : .secondary)
+                    .frame(width: 32)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(backup.name)
+                        .font(.subheadline.bold())
+
+                    HStack(spacing: 8) {
+                        Label(backup.ageFormatted, systemImage: "clock")
+                        Label(backup.fileSizeFormatted, systemImage: "doc")
+                        Label("\(backup.taskCount) tasks", systemImage: "checklist")
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                    if backup.isEncrypted {
+                        Label("Encrypted", systemImage: "lock.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.blue)
+                    }
+                }
+
+                Spacer()
+
+                VStack(spacing: 8) {
+                    Button {
+                        onRestore()
+                    } label: {
+                        Label("Restore", systemImage: "arrow.down.circle")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+
+                    Button(role: .destructive) {
+                        onDelete()
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+            }
+            .padding(.vertical, 4)
+        }
+    }
+}
+
+// MARK: - Restore Backup Sheet
+
+struct RestoreBackupSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+
+    let backup: Backup
+    let onComplete: () -> Void
+
+    @State private var password = ""
+    @State private var clearExistingData = false
+    @State private var restoreSettings = false
+    @State private var isRestoring = false
+    @State private var restoreError: Error?
+    @State private var restoreResult: RestoreResult?
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Text("Restore Backup")
+                .font(.title2.bold())
+
+            // Backup Info
+            GroupBox {
+                VStack(alignment: .leading, spacing: 8) {
+                    InfoRow(label: "Backup", value: backup.name)
+                    InfoRow(label: "Created", value: backup.ageFormatted)
+                    InfoRow(label: "Size", value: backup.fileSizeFormatted)
+                    InfoRow(label: "Tasks", value: "\(backup.taskCount)")
+                }
+                .padding(.vertical, 4)
+            }
+
+            // Password (if encrypted)
+            if backup.isEncrypted {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Password")
+                        .font(.headline)
+
+                    SecureField("Enter backup password", text: $password)
+                        .textFieldStyle(.roundedBorder)
+
+                    Text("This backup is encrypted. Enter the password you used when creating it.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            // Restore Options
+            GroupBox("Restore Options") {
+                VStack(alignment: .leading, spacing: 12) {
+                    Toggle("Clear existing data first", isOn: $clearExistingData)
+                    Toggle("Restore settings", isOn: $restoreSettings)
+                }
+                .padding(.vertical, 8)
+            }
+
+            // Warning
+            if clearExistingData {
+                GroupBox {
+                    Label("Warning: All existing data will be deleted before restoring", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+            }
+
+            // Result
+            if let result = restoreResult {
+                GroupBox {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("Restore Complete", systemImage: "checkmark.circle.fill")
+                            .font(.subheadline.bold())
+                            .foregroundStyle(.green)
+
+                        Text("Restored: \(result.tasksRestored) tasks")
+                            .font(.caption)
+
+                        if result.tasksFailed > 0 {
+                            Text("Failed: \(result.tasksFailed) tasks")
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+
+            if let error = restoreError {
+                GroupBox {
+                    Label(error.localizedDescription, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+            }
+
+            Spacer()
+
+            HStack {
+                Button("Cancel") {
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
+
+                Spacer()
+
+                Button(restoreResult != nil ? "Done" : "Restore") {
+                    if restoreResult != nil {
+                        onComplete()
+                        dismiss()
+                    } else {
+                        Task { await performRestore() }
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+                .disabled(isRestoring || (backup.isEncrypted && password.isEmpty))
+            }
+        }
+        .padding()
+        .frame(width: 500, height: 550)
+    }
+
+    @MainActor
+    private func performRestore() async {
+        isRestoring = true
+        restoreError = nil
+        defer { isRestoring = false }
+
+        do {
+            let exportCoordinator = ExportCoordinator(modelContext: modelContext)
+            let backupManager = BackupManager(
+                modelContext: modelContext,
+                exportCoordinator: exportCoordinator
+            )
+
+            let options = RestoreOptions(
+                clearExistingData: clearExistingData,
+                restoreSettings: restoreSettings
+            )
+
+            let result = try await backupManager.restoreBackup(
+                backup,
+                password: backup.isEncrypted ? password : nil,
+                options: options
+            )
+
+            restoreResult = result
+            password = "" // Clear password
+        } catch {
+            restoreError = error
         }
     }
 }
@@ -340,6 +617,8 @@ struct ExportSheetView: View {
     @State private var exportOptions = ExportOptions.complete
     @State private var isExporting = false
     @State private var exportError: Error?
+    @State private var exportPreview: ExportPreview?
+    @State private var isLoadingPreview = false
 
     var body: some View {
         VStack(spacing: 20) {
@@ -357,10 +636,27 @@ struct ExportSheetView: View {
             GroupBox("Options") {
                 VStack(alignment: .leading, spacing: 12) {
                     Toggle("Include completed tasks", isOn: $exportOptions.includeCompleted)
+                        .onChange(of: exportOptions.includeCompleted) { _, _ in
+                            Task { await loadPreview() }
+                        }
                     Toggle("Include archived tasks", isOn: $exportOptions.includeArchived)
+                        .onChange(of: exportOptions.includeArchived) { _, _ in
+                            Task { await loadPreview() }
+                        }
                     Toggle("Include settings", isOn: $exportOptions.includeSettings)
+                        .onChange(of: exportOptions.includeSettings) { _, _ in
+                            Task { await loadPreview() }
+                        }
                 }
                 .padding(.vertical, 8)
+            }
+
+            // Preview Section
+            if isLoadingPreview {
+                ProgressView("Loading preview...")
+                    .padding()
+            } else if let preview = exportPreview {
+                ExportPreviewCard(preview: preview)
             }
 
             if let error = exportError {
@@ -368,6 +664,8 @@ struct ExportSheetView: View {
                     .foregroundStyle(.red)
                     .font(.caption)
             }
+
+            Spacer()
 
             HStack {
                 Button("Cancel") {
@@ -386,7 +684,23 @@ struct ExportSheetView: View {
             }
         }
         .padding()
-        .frame(width: 450)
+        .frame(width: 500, height: 600)
+        .task {
+            await loadPreview()
+        }
+    }
+
+    @MainActor
+    private func loadPreview() async {
+        isLoadingPreview = true
+        defer { isLoadingPreview = false }
+
+        do {
+            let coordinator = ExportCoordinator(modelContext: modelContext)
+            exportPreview = try await coordinator.generatePreview(options: exportOptions)
+        } catch {
+            // Preview is optional, don't show error
+        }
     }
 
     @MainActor
@@ -404,6 +718,92 @@ struct ExportSheetView: View {
             dismiss()
         } catch {
             exportError = error
+        }
+    }
+}
+
+// MARK: - Export Preview Card
+
+struct ExportPreviewCard: View {
+    let preview: ExportPreview
+
+    var body: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 12) {
+                Label("Preview", systemImage: "eye")
+                    .font(.subheadline.bold())
+
+                HStack {
+                    StatView(label: "Active", value: "\(preview.activeCount)")
+                    StatView(label: "Completed", value: "\(preview.completedCount)")
+                    StatView(label: "Archived", value: "\(preview.archivedCount)")
+                    StatView(label: "Total", value: "\(preview.totalCount)")
+                }
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 6) {
+                    InfoRow(label: "Date Range", value: preview.dateRangeFormatted)
+                    InfoRow(label: "Estimated Size", value: preview.estimatedSizeFormatted)
+                    InfoRow(label: "Tags", value: preview.tagSummary)
+                }
+
+                if !preview.sampleTasks.isEmpty {
+                    Divider()
+                    Text("Sample Tasks")
+                        .font(.caption.bold())
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(preview.sampleTasks.prefix(3)) { task in
+                            HStack {
+                                Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
+                                    .font(.caption)
+                                    .foregroundStyle(task.isCompleted ? .green : .secondary)
+
+                                Text(task.title)
+                                    .font(.caption)
+                                    .lineLimit(1)
+
+                                Spacer()
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(.vertical, 4)
+        }
+    }
+}
+
+struct StatView: View {
+    let label: String
+    let value: String
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Text(value)
+                .font(.title3.bold())
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+struct InfoRow: View {
+    let label: String
+    let value: String
+
+    var body: some View {
+        HStack {
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(value)
+                .font(.caption)
+                .lineLimit(1)
         }
     }
 }
