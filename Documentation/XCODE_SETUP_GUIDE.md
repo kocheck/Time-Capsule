@@ -49,8 +49,8 @@ brew install swiftlint xcbeautify
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/kocheck/Time-Capsule.git
-cd Time-Capsule
+git clone https://github.com/timecapsule/timecapsule.git
+cd timecapsule
 ```
 
 ### 2. Install Dependencies
@@ -138,7 +138,7 @@ Xcode will create some default files. Delete these (Move to Trash):
 
 | Setting | Value |
 |---------|-------|
-| **Minimum Deployments** | macOS 14.0 |
+| **macOS Deployment Target** | macOS 14.0 |
 | **Mac Catalyst** | Unchecked |
 
 #### Frameworks and Libraries
@@ -228,7 +228,7 @@ Now add all the source code to the project. It's important to maintain the folde
    - `Preview Content`
 
 5. **Important**: Check these options:
-   - ☑ **Copy items if needed** (UNCHECK this - we want references)
+   - ☐ **Copy items if needed** (leave UNCHECKED - we want references)
    - ☑ **Create groups** (not folder references)
    - ☑ **Add to targets**: TimeCapsule
 
@@ -271,13 +271,13 @@ TimeCapsule
 │   └── Components/
 │       └── [8 files]
 ├── ViewModels
-│   └── [4 view model files]
+│   └── [6 view model files]
 ├── Services
-│   ├── [7 service files]
+│   ├── [6 service files]
 │   ├── AI/
 │   │   └── [8 files]
 │   └── DataSovereignty/
-│       └── [4 files]
+│       └── [14 files]
 ├── Utilities
 │   ├── Logger.swift
 │   ├── Constants.swift
@@ -299,7 +299,7 @@ TimeCapsule
 |-----|------|-------|
 | `LSUIElement` | Boolean | YES |
 | `CFBundleDisplayName` | String | Time Capsule |
-| `NSHumanReadableCopyright` | String | Copyright © 2024 |
+| `NSHumanReadableCopyright` | String | Copyright © 2026 Time Capsule. All rights reserved. |
 
 **Important**: `LSUIElement = YES` makes this a menu bar-only app (no dock icon).
 
@@ -622,8 +622,8 @@ make install        # Install to /Applications
 
 If you encounter issues:
 
-1. Check [GitHub Issues](https://github.com/kocheck/Time-Capsule/issues)
-2. Review [CONTRIBUTING.md](Contributing.md)
+1. Check [GitHub Issues](https://github.com/timecapsule/timecapsule/issues)
+2. Review [CONTRIBUTING.md](Documentation/Contributing.md)
 3. Open a new issue with:
    - Xcode version
    - macOS version
