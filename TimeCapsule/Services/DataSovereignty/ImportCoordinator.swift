@@ -3,7 +3,7 @@ import SwiftData
 import OSLog
 
 actor ImportCoordinator {
-    private let logger = Logger.import_
+    private let logger = Logger.importLogger
     private let modelContext: ModelContext
 
     init(modelContext: ModelContext) {

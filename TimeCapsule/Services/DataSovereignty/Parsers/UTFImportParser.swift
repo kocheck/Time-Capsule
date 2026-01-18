@@ -3,7 +3,7 @@ import CryptoKit
 import OSLog
 
 struct UTFImportParser: ImportParser {
-    private let logger = Logger.import_
+    private let logger = Logger.importLogger
 
     func parse(_ data: Data) async throws -> [ImportedTask] {
         let decoder = JSONDecoder()

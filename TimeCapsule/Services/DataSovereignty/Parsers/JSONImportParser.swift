@@ -2,7 +2,7 @@ import Foundation
 import OSLog
 
 struct JSONImportParser: ImportParser {
-    private let logger = Logger.import_
+    private let logger = Logger.importLogger
 
     func parse(_ data: Data) async throws -> [ImportedTask] {
         let decoder = JSONDecoder()

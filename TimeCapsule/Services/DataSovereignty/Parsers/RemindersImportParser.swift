@@ -4,7 +4,7 @@ import OSLog
 /// Placeholder parser for Apple Reminders
 /// In a full implementation, this would use EventKit to access Reminders directly
 struct RemindersImportParser: ImportParser {
-    private let logger = Logger.import_
+    private let logger = Logger.importLogger
 
     func parse(_ data: Data) async throws -> [ImportedTask] {
         // This is a placeholder implementation

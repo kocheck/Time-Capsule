@@ -2,7 +2,7 @@ import Foundation
 import OSLog
 
 struct CSVImportParser: ImportParser {
-    private let logger = Logger.import_
+    private let logger = Logger.importLogger
 
     func parse(_ data: Data) async throws -> [ImportedTask] {
         guard let csvString = String(data: data, encoding: .utf8) else {
