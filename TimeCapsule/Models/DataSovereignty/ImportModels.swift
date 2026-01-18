@@ -56,10 +56,12 @@ enum ImportSource: String, CaseIterable, Identifiable {
 struct ImportOptions {
     var conflictStrategy: ConflictStrategy
     var preserveIds: Bool
+    var conflictResolutions: [UUID: ConflictResolution]
 
     init(conflictStrategy: ConflictStrategy = .keepBoth, preserveIds: Bool = false) {
         self.conflictStrategy = conflictStrategy
         self.preserveIds = preserveIds
+        self.conflictResolutions = [:]
     }
 }
 
@@ -67,6 +69,12 @@ enum ConflictStrategy: String, CaseIterable {
     case keepBoth = "Keep Both"
     case replaceExisting = "Replace Existing"
     case skipDuplicates = "Skip Duplicates"
+}
+
+enum ConflictResolution: String {
+    case keepExisting = "Keep Existing"
+    case useImported = "Use Imported"
+    case skip = "Skip Both"
 }
 
 // MARK: - Import Result

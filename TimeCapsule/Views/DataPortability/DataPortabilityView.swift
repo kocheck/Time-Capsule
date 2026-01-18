@@ -53,6 +53,8 @@ struct DataPortabilityView: View {
                         ImportTabView(showingSheet: $showingImportSheet)
                     case .backup:
                         BackupTabView(showingSheet: $showingBackupSheet)
+                    case .diagnostics:
+                        DiagnosticsTabView()
                     }
                 }
                 .padding()
@@ -77,6 +79,7 @@ enum PortabilityTab: String, CaseIterable, Identifiable {
     case export
     case import_
     case backup
+    case diagnostics
 
     var id: String { rawValue }
 
@@ -85,6 +88,7 @@ enum PortabilityTab: String, CaseIterable, Identifiable {
         case .export: return "Export"
         case .import_: return "Import"
         case .backup: return "Backup"
+        case .diagnostics: return "Diagnostics"
         }
     }
 
@@ -93,6 +97,7 @@ enum PortabilityTab: String, CaseIterable, Identifiable {
         case .export: return "square.and.arrow.up"
         case .import_: return "square.and.arrow.down"
         case .backup: return "externaldrive"
+        case .diagnostics: return "chart.bar.doc.horizontal"
         }
     }
 }
@@ -818,6 +823,9 @@ struct ImportSheetView: View {
     @State private var importResult: ImportResult?
     @State private var importError: Error?
     @State private var showingFilePicker = false
+    @State private var importPreview: ImportPreview?
+    @State private var isLoadingPreview = false
+    @State private var conflictResolutions: [UUID: ConflictResolution] = [:]
 
     var body: some View {
         VStack(spacing: 20) {
@@ -866,14 +874,51 @@ struct ImportSheetView: View {
                 }
             }
 
-            // Instructions
-            GroupBox {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(selectedSource.exportInstructions)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+            // Preview Loading
+            if isLoadingPreview {
+                ProgressView("Analyzing file...")
+                    .padding()
+            }
+
+            // Conflict Resolution
+            if let preview = importPreview, preview.hasConflicts {
+                ConflictResolutionView(
+                    conflicts: preview.potentialConflicts,
+                    resolutions: $conflictResolutions
+                )
+            }
+
+            // Preview Summary
+            if let preview = importPreview, !preview.hasConflicts {
+                GroupBox {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("Ready to Import", systemImage: "checkmark.circle")
+                            .font(.subheadline.bold())
+                            .foregroundStyle(.green)
+
+                        Text("\(preview.taskCount) tasks found")
+                            .font(.caption)
+
+                        if !preview.tags.isEmpty {
+                            Text("Tags: \(preview.tags.sorted().prefix(5).joined(separator: ", "))")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.vertical, 4)
                 }
-                .padding(.vertical, 4)
+            }
+
+            // Instructions (only if no file selected)
+            if selectedFileURL == nil {
+                GroupBox {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(selectedSource.exportInstructions)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 4)
+                }
             }
 
             // Result
@@ -916,16 +961,27 @@ struct ImportSheetView: View {
 
                 Spacer()
 
-                Button("Import") {
-                    Task { await performImport() }
+                Button(importResult != nil ? "Done" : "Import") {
+                    if importResult != nil {
+                        dismiss()
+                    } else {
+                        Task { await performImport() }
+                    }
                 }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
-                .disabled(selectedFileURL == nil || isImporting)
+                .disabled(selectedFileURL == nil || isImporting || (importPreview?.hasConflicts == true && !allConflictsResolved))
             }
         }
         .padding()
-        .frame(width: 500, height: 500)
+        .frame(width: 600, height: 650)
+    }
+
+    private var allConflictsResolved: Bool {
+        guard let preview = importPreview else { return true }
+        return preview.potentialConflicts.allSatisfy { conflict in
+            conflictResolutions[conflict.id] != nil
+        }
     }
 
     @MainActor
@@ -941,6 +997,23 @@ struct ImportSheetView: View {
             selectedFileURL = panel.url
             importResult = nil
             importError = nil
+            Task { await loadPreview() }
+        }
+    }
+
+    @MainActor
+    private func loadPreview() async {
+        guard let fileURL = selectedFileURL else { return }
+
+        isLoadingPreview = true
+        defer { isLoadingPreview = false }
+
+        do {
+            let coordinator = ImportCoordinator(modelContext: modelContext)
+            importPreview = try await coordinator.generatePreview(from: fileURL, source: selectedSource)
+            conflictResolutions.removeAll()
+        } catch {
+            importError = error
         }
     }
 
@@ -954,15 +1027,171 @@ struct ImportSheetView: View {
 
         do {
             let coordinator = ImportCoordinator(modelContext: modelContext)
+            var options = ImportOptions()
+            options.conflictResolutions = conflictResolutions
+
             let result = try await coordinator.importData(
                 from: fileURL,
                 source: selectedSource,
-                options: ImportOptions()
+                options: options
             )
             importResult = result
         } catch {
             importError = error
         }
+    }
+}
+
+// MARK: - Conflict Resolution
+
+struct ConflictResolutionView: View {
+    let conflicts: [ImportConflict]
+    @Binding var resolutions: [UUID: ConflictResolution]
+
+    @State private var applyToAll: ConflictResolution?
+    @State private var showingApplyToAll = false
+
+    var body: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Label("\(conflicts.count) Conflicts Found", systemImage: "exclamationmark.triangle.fill")
+                        .font(.subheadline.bold())
+                        .foregroundStyle(.orange)
+
+                    Spacer()
+
+                    Button("Apply to All...") {
+                        showingApplyToAll = true
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+
+                Divider()
+
+                ScrollView {
+                    VStack(spacing: 12) {
+                        ForEach(conflicts) { conflict in
+                            ConflictRow(
+                                conflict: conflict,
+                                resolution: Binding(
+                                    get: { resolutions[conflict.id] },
+                                    set: { resolutions[conflict.id] = $0 }
+                                )
+                            )
+                        }
+                    }
+                }
+                .frame(maxHeight: 200)
+            }
+            .padding(.vertical, 4)
+        }
+        .alert("Apply to All Conflicts", isPresented: $showingApplyToAll) {
+            Button("Keep All Existing") {
+                applyResolutionToAll(.keepExisting)
+            }
+            Button("Use All Imported") {
+                applyResolutionToAll(.useImported)
+            }
+            Button("Skip All") {
+                applyResolutionToAll(.skip)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Choose how to resolve all \(conflicts.count) conflicts at once.")
+        }
+    }
+
+    private func applyResolutionToAll(_ resolution: ConflictResolution) {
+        for conflict in conflicts {
+            resolutions[conflict.id] = resolution
+        }
+    }
+}
+
+struct ConflictRow: View {
+    let conflict: ImportConflict
+    @Binding var resolution: ConflictResolution?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Conflict Type
+            HStack {
+                Image(systemName: "exclamationmark.circle.fill")
+                    .foregroundStyle(.orange)
+                Text(conflict.description)
+                    .font(.caption.bold())
+                    .foregroundStyle(.orange)
+            }
+
+            // Side-by-side comparison
+            HStack(spacing: 12) {
+                // Existing Task
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Existing")
+                        .font(.caption2.bold())
+                        .foregroundStyle(.secondary)
+
+                    Text(conflict.existingTask.title)
+                        .font(.caption)
+                        .lineLimit(2)
+
+                    if !conflict.existingTask.tags.isEmpty {
+                        Text(conflict.existingTask.tags.joined(separator: ", "))
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(.controlBackgroundColor))
+                .cornerRadius(6)
+
+                // Arrow
+                Image(systemName: "arrow.left.arrow.right")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                // Imported Task
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Imported")
+                        .font(.caption2.bold())
+                        .foregroundStyle(.secondary)
+
+                    Text(conflict.importedTask.title)
+                        .font(.caption)
+                        .lineLimit(2)
+
+                    if !conflict.importedTask.tags.isEmpty {
+                        Text(conflict.importedTask.tags.joined(separator: ", "))
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(.controlBackgroundColor))
+                .cornerRadius(6)
+            }
+
+            // Resolution Picker
+            Picker("Resolution", selection: $resolution) {
+                Text("Choose action...").tag(nil as ConflictResolution?)
+                ForEach([ConflictResolution.keepExisting, .useImported, .skip], id: \.self) { res in
+                    Text(res.rawValue).tag(res as ConflictResolution?)
+                }
+            }
+            .pickerStyle(.menu)
+            .frame(maxWidth: .infinity)
+        }
+        .padding(8)
+        .background(resolution != nil ? Color.green.opacity(0.1) : Color.clear)
+        .cornerRadius(8)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(resolution != nil ? Color.green : Color.orange.opacity(0.3), lineWidth: 1)
+        )
     }
 }
 
@@ -1125,6 +1354,255 @@ struct BackupSheetView: View {
             backupError = error
         }
     }
+}
+
+// MARK: - Diagnostics Tab
+
+struct DiagnosticsTabView: View {
+    @State private var diagnosticReport: DiagnosticReport?
+    @State private var isLoading = false
+    @State private var showingExportSheet = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Diagnostics")
+                .font(.headline)
+
+            Text("View performance metrics and diagnostic information for data operations.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+
+            if isLoading {
+                ProgressView("Loading diagnostics...")
+                    .frame(maxWidth: .infinity)
+                    .padding()
+            } else if let report = diagnosticReport {
+                // Performance Metrics
+                GroupBox("Performance Metrics") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        MetricRow(label: "Total Exports", value: "\(report.performanceMetrics.totalExports)")
+                        MetricRow(label: "Total Imports", value: "\(report.performanceMetrics.totalImports)")
+                        MetricRow(label: "Total Backups", value: "\(report.performanceMetrics.totalBackups)")
+
+                        Divider()
+
+                        MetricRow(
+                            label: "Avg Export Time",
+                            value: report.performanceMetrics.averageExportTimeMs.map { "\($0)ms" } ?? "N/A"
+                        )
+                        MetricRow(
+                            label: "Avg Import Time",
+                            value: report.performanceMetrics.averageImportTimeMs.map { "\($0)ms" } ?? "N/A"
+                        )
+                        MetricRow(
+                            label: "Avg Backup Time",
+                            value: report.performanceMetrics.averageBackupTimeMs.map { "\($0)ms" } ?? "N/A"
+                        )
+                    }
+                    .padding(.vertical, 4)
+                }
+
+                // Recent Operations
+                GroupBox("Recent Operations") {
+                    VStack(alignment: .leading, spacing: 6) {
+                        if report.operationHistory.isEmpty {
+                            Text("No operations yet")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            ForEach(report.operationHistory.prefix(5)) { operation in
+                                HStack {
+                                    Image(systemName: operation.status == .completed ? "checkmark.circle.fill" : operation.status == .failed ? "xmark.circle.fill" : "circle")
+                                        .foregroundStyle(operation.status == .completed ? .green : operation.status == .failed ? .red : .secondary)
+                                        .font(.caption)
+
+                                    Text(operation.operationType)
+                                        .font(.caption)
+
+                                    Spacer()
+
+                                    if let duration = operation.durationMs {
+                                        Text("\(duration)ms")
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+
+                // System Info
+                GroupBox("System Information") {
+                    VStack(alignment: .leading, spacing: 6) {
+                        MetricRow(label: "OS", value: report.systemInfo.osVersion)
+                        MetricRow(
+                            label: "Available Memory",
+                            value: ByteCountFormatter.string(fromByteCount: report.systemInfo.availableMemory, countStyle: .memory)
+                        )
+                        MetricRow(
+                            label: "Available Disk",
+                            value: ByteCountFormatter.string(fromByteCount: report.systemInfo.availableDiskSpace, countStyle: .file)
+                        )
+                    }
+                    .padding(.vertical, 4)
+                }
+
+                Spacer()
+
+                // Actions
+                HStack(spacing: 12) {
+                    Button {
+                        Task { await clearDiagnostics() }
+                    } label: {
+                        Label("Clear Data", systemImage: "trash")
+                    }
+                    .buttonStyle(.bordered)
+
+                    Spacer()
+
+                    Button {
+                        showingExportSheet = true
+                    } label: {
+                        Label("Export Report", systemImage: "square.and.arrow.up")
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            }
+        }
+        .task {
+            await loadDiagnostics()
+        }
+        .sheet(isPresented: $showingExportSheet) {
+            DiagnosticExportSheet(report: diagnosticReport)
+        }
+    }
+
+    @MainActor
+    private func loadDiagnostics() async {
+        isLoading = true
+        defer { isLoading = false }
+
+        diagnosticReport = await DiagnosticService.shared.generateReport()
+    }
+
+    @MainActor
+    private func clearDiagnostics() async {
+        await DiagnosticService.shared.clearDiagnostics()
+        await loadDiagnostics()
+    }
+}
+
+struct MetricRow: View {
+    let label: String
+    let value: String
+
+    var body: some View {
+        HStack {
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(value)
+                .font(.caption)
+        }
+    }
+}
+
+struct DiagnosticExportSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let report: DiagnosticReport?
+
+    @State private var exportFormat: DiagnosticExportFormat = .text
+    @State private var isExporting = false
+    @State private var exportError: Error?
+    @State private var exportSuccess = false
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Text("Export Diagnostic Report")
+                .font(.title2.bold())
+
+            Picker("Format", selection: $exportFormat) {
+                Text("Text").tag(DiagnosticExportFormat.text)
+                Text("JSON").tag(DiagnosticExportFormat.json)
+            }
+            .pickerStyle(.segmented)
+
+            if let error = exportError {
+                GroupBox {
+                    Label(error.localizedDescription, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+            }
+
+            if exportSuccess {
+                GroupBox {
+                    Label("Report exported successfully", systemImage: "checkmark.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                }
+            }
+
+            Spacer()
+
+            HStack {
+                Button("Cancel") {
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
+
+                Spacer()
+
+                Button(exportSuccess ? "Done" : "Export") {
+                    if exportSuccess {
+                        dismiss()
+                    } else {
+                        Task { await performExport() }
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+                .disabled(isExporting)
+            }
+        }
+        .padding()
+        .frame(width: 400, height: 250)
+    }
+
+    @MainActor
+    private func performExport() async {
+        guard let report = report else { return }
+
+        isExporting = true
+        exportError = nil
+        defer { isExporting = false }
+
+        do {
+            let panel = NSSavePanel()
+            panel.title = "Export Diagnostic Report"
+            panel.nameFieldStringValue = "diagnostics-\(Date().formatted(date: .numeric, time: .omitted))"
+            panel.allowedContentTypes = [exportFormat == .text ? .plainText : .json]
+
+            if panel.runModal() == .OK, let url = panel.url {
+                if exportFormat == .text {
+                    try await DiagnosticService.shared.exportDiagnosticsAsText(to: url)
+                } else {
+                    try await DiagnosticService.shared.exportDiagnostics(to: url)
+                }
+                exportSuccess = true
+            }
+        } catch {
+            exportError = error
+        }
+    }
+}
+
+enum DiagnosticExportFormat {
+    case text
+    case json
 }
 
 #Preview {

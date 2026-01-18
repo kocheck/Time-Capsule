@@ -31,80 +31,97 @@ actor BackupManager {
         encrypt: Bool = false,
         password: String? = nil
     ) async throws -> Backup {
+        // Track operation start
+        let startTime = Date()
+        let operationId = await DiagnosticService.shared.trackOperationStart(
+            "Create Backup",
+            details: "encrypted=\(encrypt)"
+        )
+
         let backupId = UUID()
         let timestamp = Date()
         let backupName = name ?? "Backup \(timestamp.formatted(date: .abbreviated, time: .shortened))"
 
         logger.info("Creating backup: \(backupName)")
 
-        // Fetch task counts first
-        let activeTasks = try await fetchActiveTasks()
-        let completedTasks = try await fetchCompletedTasks()
-        let archivedTasks = try await fetchArchivedTasks()
+        do {
+            // Fetch task counts first
+            let activeTasks = try await fetchActiveTasks()
+            let completedTasks = try await fetchCompletedTasks()
+            let archivedTasks = try await fetchArchivedTasks()
 
-        // Create temporary file for export
-        let tempURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("\(backupId.uuidString).utf.json")
+            // Create temporary file for export
+            let tempURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent("\(backupId.uuidString).utf.json")
 
-        // Export all data to temporary location
-        let exportResult = try await exportCoordinator.export(
-            format: .universalTaskFormat,
-            options: .complete,
-            destination: tempURL
-        )
+            // Export all data to temporary location
+            let exportResult = try await exportCoordinator.export(
+                format: .universalTaskFormat,
+                options: .complete,
+                destination: tempURL
+            )
 
-        // Read exported data
-        let exportedData = try Data(contentsOf: exportResult.destination)
+            // Read exported data
+            let exportedData = try Data(contentsOf: exportResult.destination)
 
-        // Compress
-        let compressedData = try compress(exportedData)
+            // Compress
+            let compressedData = try compress(exportedData)
 
-        // Encrypt if requested
-        let finalData: Data
-        let isEncrypted: Bool
+            // Encrypt if requested
+            let finalData: Data
+            let isEncrypted: Bool
 
-        if encrypt {
-            guard let password = password else {
-                throw BackupError.passwordRequired
+            if encrypt {
+                guard let password = password else {
+                    throw BackupError.passwordRequired
+                }
+                finalData = try encryptData(compressedData, password: password)
+                isEncrypted = true
+            } else {
+                finalData = compressedData
+                isEncrypted = false
             }
-            finalData = try encryptData(compressedData, password: password)
-            isEncrypted = true
-        } else {
-            finalData = compressedData
-            isEncrypted = false
+
+            // Create backup file
+            let backupFileName = "\(backupId.uuidString).tcbackup"
+            let backupURL = backupDirectory.appendingPathComponent(backupFileName)
+            try finalData.write(to: backupURL)
+
+            // Clean up temporary file
+            try? FileManager.default.removeItem(at: tempURL)
+
+            // Create backup metadata
+            let backup = Backup(
+                id: backupId,
+                name: backupName,
+                createdAt: timestamp,
+                fileURL: backupURL,
+                fileSizeBytes: finalData.count,
+                isEncrypted: isEncrypted,
+                taskCount: activeTasks.count,
+                completedTaskCount: completedTasks.count,
+                archivedTaskCount: archivedTasks.count,
+                appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
+            )
+
+            // Save backup metadata
+            try await saveBackupMetadata(backup)
+
+            // Cleanup old backups
+            try await cleanupOldBackups()
+
+            logger.info("Backup created successfully: \(backup.fileSizeFormatted)")
+
+            // Track operation success
+            let duration = Int(Date().timeIntervalSince(startTime) * 1000)
+            await DiagnosticService.shared.trackOperationComplete(operationId, durationMs: duration)
+
+            return backup
+        } catch {
+            // Track operation failure
+            await DiagnosticService.shared.trackOperationFailed(operationId, error: error)
+            throw error
         }
-
-        // Create backup file
-        let backupFileName = "\(backupId.uuidString).tcbackup"
-        let backupURL = backupDirectory.appendingPathComponent(backupFileName)
-        try finalData.write(to: backupURL)
-
-        // Clean up temporary file
-        try? FileManager.default.removeItem(at: tempURL)
-
-        // Create backup metadata
-        let backup = Backup(
-            id: backupId,
-            name: backupName,
-            createdAt: timestamp,
-            fileURL: backupURL,
-            fileSizeBytes: finalData.count,
-            isEncrypted: isEncrypted,
-            taskCount: activeTasks.count,
-            completedTaskCount: completedTasks.count,
-            archivedTaskCount: archivedTasks.count,
-            appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
-        )
-
-        // Save backup metadata
-        try await saveBackupMetadata(backup)
-
-        // Cleanup old backups
-        try await cleanupOldBackups()
-
-        logger.info("Backup created successfully: \(backup.fileSizeFormatted)")
-
-        return backup
     }
 
     // MARK: - Restore Backup

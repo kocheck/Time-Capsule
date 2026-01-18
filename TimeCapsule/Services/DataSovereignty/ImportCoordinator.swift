@@ -74,58 +74,101 @@ actor ImportCoordinator {
         source: ImportSource,
         options: ImportOptions
     ) async throws -> ImportResult {
+        // Track operation start
+        let startTime = Date()
+        let operationId = await DiagnosticService.shared.trackOperationStart(
+            "Import (\(source.rawValue))",
+            details: "file=\(url.lastPathComponent)"
+        )
+
         logger.info("Starting import from \(source.rawValue)")
 
-        // Read file
-        let data = try Data(contentsOf: url)
-
-        // Parse based on source
-        let parser = createParser(for: source)
-        let importedTasks = try await parser.parse(data)
-
-        logger.info("Parsed \(importedTasks.count) tasks from import file")
-
-        // Import tasks
-        var importedCount = 0
-        var skippedCount = 0
-        var errors: [ImportError] = []
-
-        for importedTask in importedTasks {
-            do {
-                // Check for conflicts
-                if !options.preserveIds || options.conflictStrategy != .replaceExisting {
-                    // Create new task
-                    let task = importedTask.toTaskItem()
-                    modelContext.insert(task)
-                    importedCount += 1
-                } else {
-                    // Handle ID preservation and conflicts
-                    let task = importedTask.toTaskItem()
-                    modelContext.insert(task)
-                    importedCount += 1
-                }
-            } catch {
-                logger.error("Failed to import task: \(importedTask.title) - \(error)")
-                errors.append(ImportError(taskTitle: importedTask.title, errorMessage: error.localizedDescription))
-                skippedCount += 1
-            }
-        }
-
-        // Save all changes
         do {
-            try modelContext.save()
-            logger.info("Import completed: \(importedCount) imported, \(skippedCount) skipped")
-        } catch {
-            logger.error("Failed to save imported tasks: \(error)")
-            throw ImportError(taskTitle: "All tasks", errorMessage: "Failed to save: \(error.localizedDescription)")
-        }
+            // Read file
+            let data = try Data(contentsOf: url)
 
-        return ImportResult(
-            success: true,
-            importedCount: importedCount,
-            skippedCount: skippedCount,
-            errors: errors
-        )
+            // Parse based on source
+            let parser = createParser(for: source)
+            let importedTasks = try await parser.parse(data)
+
+            logger.info("Parsed \(importedTasks.count) tasks from import file")
+
+            // Detect conflicts again to get fresh state
+            let conflicts = try await detectConflicts(importedTasks)
+
+            // Build conflict lookup by imported task title
+            let conflictsByTitle = Dictionary(grouping: conflicts, by: { $0.importedTask.title.lowercased() })
+
+            // Import tasks
+            var importedCount = 0
+            var skippedCount = 0
+            var errors: [ImportError] = []
+
+            for importedTask in importedTasks {
+                do {
+                    // Check if this task has a conflict
+                    if let taskConflicts = conflictsByTitle[importedTask.title.lowercased()],
+                       let conflict = taskConflicts.first,
+                       let resolution = options.conflictResolutions[conflict.id] {
+
+                        // Apply user's conflict resolution
+                        switch resolution {
+                        case .keepExisting:
+                            // Skip importing, keep existing task
+                            logger.debug("Keeping existing task: \(importedTask.title)")
+                            skippedCount += 1
+
+                        case .useImported:
+                            // Replace existing task with imported one
+                            logger.debug("Replacing existing task with imported: \(importedTask.title)")
+                            modelContext.delete(conflict.existingTask)
+                            let newTask = importedTask.toTaskItem()
+                            modelContext.insert(newTask)
+                            importedCount += 1
+
+                        case .skip:
+                            // Skip both, don't import
+                            logger.debug("Skipping conflicted task: \(importedTask.title)")
+                            skippedCount += 1
+                        }
+                    } else {
+                        // No conflict, import normally
+                        let task = importedTask.toTaskItem()
+                        modelContext.insert(task)
+                        importedCount += 1
+                    }
+                } catch {
+                    logger.error("Failed to import task: \(importedTask.title) - \(error)")
+                    errors.append(ImportError(taskTitle: importedTask.title, errorMessage: error.localizedDescription))
+                    skippedCount += 1
+                }
+            }
+
+            // Save all changes
+            do {
+                try modelContext.save()
+                logger.info("Import completed: \(importedCount) imported, \(skippedCount) skipped")
+            } catch {
+                logger.error("Failed to save imported tasks: \(error)")
+                throw ImportError(taskTitle: "All tasks", errorMessage: "Failed to save: \(error.localizedDescription)")
+            }
+
+            // Track operation success
+            let duration = Int(Date().timeIntervalSince(startTime) * 1000)
+            await DiagnosticService.shared.trackOperationComplete(operationId, durationMs: duration)
+            await DiagnosticService.shared.updateLargestImportSize(Int64(data.count))
+
+            return ImportResult(
+                success: true,
+                importedCount: importedCount,
+                skippedCount: skippedCount,
+                errors: errors
+            )
+        } catch {
+            // Track operation failure
+            await DiagnosticService.shared.trackOperationFailed(operationId, error: error)
+            throw error
+        }
     }
 
     // MARK: - Source-Specific Parsers

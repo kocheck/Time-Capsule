@@ -5,6 +5,9 @@ struct MenuBarView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var selectedTab: MenuTab = .suggestion
     @State private var aiService: AIServiceProtocol
+    @State private var showingExportSheet = false
+    @State private var showingImportSheet = false
+    @State private var showingBackupSheet = false
 
     init(modelContext: ModelContext) {
         let dataService = DataService(modelContext: modelContext)
@@ -50,5 +53,22 @@ struct MenuBarView: View {
             .background(Color(NSColor.windowBackgroundColor))
         }
         .frame(width: Constants.menuBarWidth, height: Constants.menuBarHeight)
+        .focusedSceneValue(\.dataPortabilityActions, DataPortabilityActions(
+            openExport: { showingExportSheet = true },
+            openImport: { showingImportSheet = true },
+            openBackup: { showingBackupSheet = true }
+        ))
+        .sheet(isPresented: $showingExportSheet) {
+            ExportSheetView()
+                .modelContainer(for: [TaskItem.self, AppSettings.self])
+        }
+        .sheet(isPresented: $showingImportSheet) {
+            ImportSheetView()
+                .modelContainer(for: [TaskItem.self, AppSettings.self])
+        }
+        .sheet(isPresented: $showingBackupSheet) {
+            BackupSheetView()
+                .modelContainer(for: [TaskItem.self, AppSettings.self])
+        }
     }
 }

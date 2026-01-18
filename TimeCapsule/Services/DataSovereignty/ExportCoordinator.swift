@@ -62,67 +62,85 @@ actor ExportCoordinator {
         options: ExportOptions,
         destination: URL? = nil
     ) async throws -> ExportResult {
+        // Track operation start
+        let startTime = Date()
+        let operationId = await DiagnosticService.shared.trackOperationStart(
+            "Export (\(format.rawValue))",
+            details: "includeCompleted=\(options.includeCompleted), includeArchived=\(options.includeArchived)"
+        )
+
         logger.info("Starting export: format=\(format.rawValue)")
 
-        // Fetch data based on options
-        let tasks = try await fetchActiveTasks()
-        let completedTasks = options.includeCompleted ? try await fetchCompletedTasks() : []
-        let archivedTasks = options.includeArchived ? try await fetchArchivedTasks() : []
-        let settings = options.includeSettings ? try await fetchSettings() : nil
+        do {
+            // Fetch data based on options
+            let tasks = try await fetchActiveTasks()
+            let completedTasks = options.includeCompleted ? try await fetchCompletedTasks() : []
+            let archivedTasks = options.includeArchived ? try await fetchArchivedTasks() : []
+            let settings = options.includeSettings ? try await fetchSettings() : nil
 
-        // Create export based on format
-        let exporter = createExporter(for: format)
-        let data = try await exporter.export(
-            tasks: tasks,
-            completedTasks: completedTasks,
-            archivedTasks: archivedTasks,
-            settings: settings
-        )
-
-        // Generate manifest
-        let manifest = ExportManifest(
-            format: format,
-            exportedAt: Date(),
-            taskCount: tasks.count,
-            completedTaskCount: completedTasks.count,
-            archivedTaskCount: archivedTasks.count,
-            includesSettings: options.includeSettings,
-            checksum: SHA256.hash(data: data).hexString
-        )
-
-        // Determine destination
-        let finalDestination: URL
-        if let destination = destination {
-            finalDestination = destination
-        } else {
-            finalDestination = try await promptForSaveLocation(
-                suggestedName: generateFileName(format: format),
-                fileType: format.utType
+            // Create export based on format
+            let exporter = createExporter(for: format)
+            let data = try await exporter.export(
+                tasks: tasks,
+                completedTasks: completedTasks,
+                archivedTasks: archivedTasks,
+                settings: settings
             )
+
+            // Generate manifest
+            let manifest = ExportManifest(
+                format: format,
+                exportedAt: Date(),
+                taskCount: tasks.count,
+                completedTaskCount: completedTasks.count,
+                archivedTaskCount: archivedTasks.count,
+                includesSettings: options.includeSettings,
+                checksum: SHA256.hash(data: data).hexString
+            )
+
+            // Determine destination
+            let finalDestination: URL
+            if let destination = destination {
+                finalDestination = destination
+            } else {
+                finalDestination = try await promptForSaveLocation(
+                    suggestedName: generateFileName(format: format),
+                    fileType: format.utType
+                )
+            }
+
+            // Write data
+            try data.write(to: finalDestination, options: .atomic)
+
+            // Write manifest alongside (for JSON exports)
+            if format == .json || format == .universalTaskFormat {
+                let manifestURL = finalDestination.deletingPathExtension()
+                    .appendingPathExtension("manifest.json")
+                let encoder = JSONEncoder()
+                encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+                encoder.dateEncodingStrategy = .iso8601
+                let manifestData = try encoder.encode(manifest)
+                try manifestData.write(to: manifestURL, options: .atomic)
+            }
+
+            logger.info("Export completed: \(finalDestination.path)")
+
+            // Track operation success
+            let duration = Int(Date().timeIntervalSince(startTime) * 1000)
+            await DiagnosticService.shared.trackOperationComplete(operationId, durationMs: duration)
+            await DiagnosticService.shared.updateLargestExportSize(Int64(data.count))
+
+            return ExportResult(
+                success: true,
+                destination: finalDestination,
+                manifest: manifest,
+                exportedAt: Date()
+            )
+        } catch {
+            // Track operation failure
+            await DiagnosticService.shared.trackOperationFailed(operationId, error: error)
+            throw error
         }
-
-        // Write data
-        try data.write(to: finalDestination, options: .atomic)
-
-        // Write manifest alongside (for JSON exports)
-        if format == .json || format == .universalTaskFormat {
-            let manifestURL = finalDestination.deletingPathExtension()
-                .appendingPathExtension("manifest.json")
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            encoder.dateEncodingStrategy = .iso8601
-            let manifestData = try encoder.encode(manifest)
-            try manifestData.write(to: manifestURL, options: .atomic)
-        }
-
-        logger.info("Export completed: \(finalDestination.path)")
-
-        return ExportResult(
-            success: true,
-            destination: finalDestination,
-            manifest: manifest,
-            exportedAt: Date()
-        )
     }
 
     // MARK: - Format-Specific Exporters
