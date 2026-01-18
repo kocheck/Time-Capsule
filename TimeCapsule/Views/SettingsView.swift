@@ -3,6 +3,7 @@ import SwiftData
 
 struct SettingsView: View {
     @State private var viewModel: SettingsViewModel
+    @State private var showingDataPortability = false
 
     init(modelContext: ModelContext) {
         _viewModel = State(initialValue: SettingsViewModel(modelContext: modelContext))
@@ -103,6 +104,25 @@ struct SettingsView: View {
 
                 Divider()
 
+                // Data Portability
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Data Portability")
+                        .font(.headline)
+
+                    Text("Export, import, or backup your data. Your data, your control.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
+                    Button {
+                        showingDataPortability = true
+                    } label: {
+                        Label("Manage Data", systemImage: "square.and.arrow.up.on.square")
+                    }
+                    .buttonStyle(.bordered)
+                }
+
+                Divider()
+
                 // Save Button
                 HStack {
                     ActionButton(
@@ -128,6 +148,9 @@ struct SettingsView: View {
                 Spacer()
             }
             .padding()
+        }
+        .sheet(isPresented: $showingDataPortability) {
+            DataPortabilityView()
         }
     }
 }

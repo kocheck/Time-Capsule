@@ -63,6 +63,9 @@ struct TimeCapsuleApp: App {
                 .environment(\.appDelegate, appDelegate)
         }
         .menuBarExtraStyle(.window)
+        .commands {
+            DataCommands()
+        }
     }
 }
 
@@ -126,5 +129,57 @@ struct ContentView: View {
                 minute: viewModel.settings.dailyNotificationMinute
             )
         }
+    }
+}
+
+// MARK: - Data Commands
+
+struct DataCommands: Commands {
+    @FocusedBinding(\.dataPortabilityActions) private var dataActions
+
+    var body: some Commands {
+        CommandGroup(after: .importExport) {
+            Section {
+                Button("Export Data...") {
+                    dataActions?.openExport()
+                }
+                .keyboardShortcut("E", modifiers: [.command, .shift])
+                .disabled(dataActions == nil)
+
+                Button("Import Data...") {
+                    dataActions?.openImport()
+                }
+                .keyboardShortcut("I", modifiers: [.command, .shift])
+                .disabled(dataActions == nil)
+
+                Divider()
+
+                Button("Create Backup...") {
+                    dataActions?.openBackup()
+                }
+                .keyboardShortcut("B", modifiers: [.command, .shift])
+                .disabled(dataActions == nil)
+            }
+        }
+    }
+}
+
+// MARK: - Data Portability Actions
+
+struct DataPortabilityActions {
+    let openExport: () -> Void
+    let openImport: () -> Void
+    let openBackup: () -> Void
+}
+
+// FocusedValues key for data portability actions
+struct DataPortabilityActionsKey: FocusedValueKey {
+    typealias Value = DataPortabilityActions
+}
+
+extension FocusedValues {
+    var dataPortabilityActions: DataPortabilityActions? {
+        get { self[DataPortabilityActionsKey.self] }
+        set { self[DataPortabilityActionsKey.self] = newValue }
     }
 }
