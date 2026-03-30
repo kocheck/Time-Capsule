@@ -74,6 +74,6 @@ jobs:
             -enableCodeCoverage YES
 
       - name: Upload Coverage
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         with:
           fail_ci_if_error: false
